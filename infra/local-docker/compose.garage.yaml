@@ -1,0 +1,48 @@
+services:
+  garage:
+    container_name: garage
+    image: docker.io/dxflrs/garage:v2.0.0
+    volumes:
+      # config
+      - ./garage.toml:/etc/garage.toml:ro
+      # metadata and data, mapped to what the config expects
+      - ./garage/meta:/var/lib/garage/meta
+      - ./garage/data:/var/lib/garage/data
+    ports:
+      - 9000:9000
+      - 3903:3903
+    restart: always
+    healthcheck:
+      test: ['CMD', 'garage', 'status']
+      interval: 5s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - app-network
+
+  valkey:
+    image: valkey/valkey:8.1.3-alpine3.22
+    container_name: valkey
+    ports:
+      - '6379:6379'
+    restart: always
+    command: valkey-server --appendonly yes --appendfilename "appendonly.aof" --requirepass ${VALKEY_PASSWORD}
+    volumes:
+      - valkey_data:/data
+    healthcheck:
+      test: ['CMD', 'valkey-cli', '-a', '${VALKEY_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - app-network
+
+volumes:
+  valkey_data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge

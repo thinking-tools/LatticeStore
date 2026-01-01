@@ -1,0 +1,9 @@
+dist/
+.wrangler/
+node_modules/
+package-lock.json
+.env
+.env*
+.dev.vars
+.dev.vars*
+infra/local-docker/garage

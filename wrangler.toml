@@ -1,0 +1,12 @@
+name              = "project"
+main              = "index.hono.js"
+compatibility_date = "2025-05-07"
+compatibility_flags = [ "nodejs_compat_v2" ]
+
+send_metrics = false
+
+
+assets = { directory = "./docs" }
+
+[dev]
+port = 8787
