@@ -19,7 +19,16 @@ self.onmessage = async e => {
         break;
       case 'watch':
         result = await handleWatchCheck(params);
+        if (result.authError) {
+          self.postMessage({ type: 'auth-error', vaultId: params.vaultId });
+        } else {
+          self.postMessage({ type: 'watch', vaultId: params.vaultId, changed: result.changed });
+        }
         break;
+      // case 'update-token':
+      //   // Workers don't cache tokens - they receive fresh ones each tick
+      //   self.postMessage({ type: 'token-updated' });
+      //   break;
       // case 'uploadBatch':
       //   result = await handleBatchUpload(params);
       //   break;
@@ -52,7 +61,7 @@ const handleWatchCheck = async (params: {
   vaultId: string;
   authToken: string;
   files: Array<{ id: string; etag: string }>;
-}): Promise<string[]> => {
+}): Promise<{ changed: string[]; authError?: boolean }> => {
   // const results = [] as string[];
   const { memberId, vaultId, authToken, files } = params;
   const url = `${endpoint}/check-updates`;
@@ -63,8 +72,12 @@ const handleWatchCheck = async (params: {
   const request = await authRequest(url, 'POST', authToken, { checklist: files } as CheckRequest, headers);
   const response = (await request.json()) as CheckResponse;
   if (!response.ok) {
+    const isAuthError = response.code === 401;
+    if (isAuthError) {
+      return { changed: [], authError: true };
+    }
     throw new Error(response.message || 'Check request failed');
   }
   console.warn('Check changed items:', response);
-  return response.changed;
+  return { changed: response.changed, authError: false };
 };

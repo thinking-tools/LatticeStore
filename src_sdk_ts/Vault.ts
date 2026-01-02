@@ -52,26 +52,21 @@ export class VaultController {
   #managersArea: { memberList: MemberEncryptedDetail[]; key: AEADCryptoKey } | null = null;
   #featuresKey: AEADCryptoKey | null = null;
   #features: FeatureController[] = [];
+
   // #tasker: Tasker | null = null;
-  constructor(
-    vaultManifest: Vault,
-    etag: string,
-    authToken: string,
-    member: MemberInfoBasics,
-    persistentLogin: boolean,
-  ) {
+  constructor(vaultManifest: Vault, etag: string, authToken: string, member: MemberInfoBasics, persistent: boolean) {
     this.#vaultManifest = vaultManifest;
     this.#etag = etag;
     this.#authToken = authToken;
     this.#activeMember = member;
-    this.#persistent = persistentLogin;
+    this.#persistent = persistent;
     console.warn('VaultController instance created', this.#etag);
   }
   static async init(
     serviceUrl: string,
     accountName: string,
     member: MemberInfoBasics,
-    persistentLogin: boolean,
+    persistent: boolean,
   ): Promise<VaultController> {
     const loginPayload = {
       accountName: accountName.trim(),
@@ -95,13 +90,10 @@ export class VaultController {
       throw new Error('Invalid vault manifest received from server');
     }
 
-    let vault = new VaultController(vaultManifest, response.vaultEtag, response.authToken, member, persistentLogin);
+    let vault = new VaultController(vaultManifest, response.vaultEtag, response.authToken, member, persistent);
+
     await vault.unlockAndSetupVault();
     return vault;
-  }
-
-  isPersistent(): boolean {
-    return this.#persistent;
   }
 
   unlockAndSetupVault = async (): Promise<boolean> => {
@@ -160,6 +152,14 @@ export class VaultController {
       persistent: this.#persistent,
       // tasker: this.#tasker,
     };
+  }
+
+  setPersistent(p: boolean) {
+    this.#persistent = p;
+  }
+
+  isPersistent() {
+    return this.#persistent;
   }
 
   updateAuthToken(newToken: string) {

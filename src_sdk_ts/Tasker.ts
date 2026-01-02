@@ -150,6 +150,7 @@ export class Tasker {
 
   hookVault(v: VaultController) {
     try {
+      v.setPersistent(true);
       const creds = v.getVaultCredentials();
       console.log('Hooking vault to tasker:', creds.vault);
       this.#watchQ.push({

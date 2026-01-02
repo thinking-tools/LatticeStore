@@ -97,7 +97,12 @@ export class LatticeStoreService {
       }
       const isValidToken = await this.#tokens.isValidToken(memberId, vaultId, providedAuthToken);
       if (!isValidToken) {
-        throw new Error('Invalid or expired auth token');
+        return {
+          ok: false,
+          message: 'Invalid or expired authentication token',
+          code: 401,
+          changed: [],
+        };
       }
       return {
         ok: true,

@@ -34,14 +34,7 @@ export const loginAccount = async (
 ): Promise<Account | null> => {
   const memberBasics = buildMember(memberSeed);
   const vault = await VaultController.init(serviceUrl, accountName, memberBasics, persistentLogin);
-
-  // const memberSlot = getMemberFromMemberSlots(vaultManifest.payload.memberSlots, loginPayload.memberId);
-
-  // const unlocked = await vault.unlockMember(memberBasics);
-  // if (!unlocked) {
-  //   throw new Error('Failed to unlock member slot in vault');
-  // }
-  return new Account(serviceUrl, vault);
+  return new Account(serviceUrl, vault, persistentLogin);
 };
 
 export class Account extends EventTarget {
@@ -51,12 +44,13 @@ export class Account extends EventTarget {
   readonly #tasker: Tasker;
   readonly #networkMonitor = createNetworkMonitor();
 
-  constructor(serviceUrl: string, vault: VaultController) {
+  constructor(serviceUrl: string, vault: VaultController, persistent: boolean = false) {
     super();
     this.#serviceUrl = serviceUrl;
     this.#tasker = new Tasker(this.#networkMonitor, serviceUrl);
     this.#personalVault = vault;
-    if (this.#personalVault.isPersistent()) {
+    if (persistent) {
+      // this.#personalVault.setPersistent(true);
       this.#tasker.hookVault(this.#personalVault);
     }
   }
