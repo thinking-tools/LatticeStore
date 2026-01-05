@@ -6,10 +6,11 @@ const POLL_INTERVAL = 5_000;
 type TaskerStatus = 'idle' | 'working' | 'paused:user' | 'paused:network';
 
 type WatchQItem = {
+  active: boolean;
   memberId: string;
   vaultId: string;
-  authToken: string;
-  files: Array<{ id: string; etag: string }>;
+  // authToken: Function;
+  files: Array<{ id: string; etag: string | Function }>;
   vaultRef: VaultController;
   cb: (result: boolean) => void;
 };
@@ -89,11 +90,12 @@ export class Tasker {
 
     // dispatch all watch items to worker 0
     for (const item of this.#watchQ) {
+      if (!item.active) continue;
       this.#workers[0]?.postMessage({
         action: 'watch',
         memberId: item.memberId,
         vaultId: item.vaultId,
-        authToken: item.authToken,
+        authToken: item.vaultRef.getAuthToken(),
         files: item.files,
       });
     }
@@ -142,11 +144,12 @@ export class Tasker {
       if (success) {
         const newToken = item?.vaultRef.getAuthToken();
         if (newToken) {
-          for (const w of this.#watchQ) {
-            if (w.vaultId === vaultId) {
-              w.authToken = newToken;
-            }
-          }
+          // TODO
+          // for (const w of this.#watchQ) {
+          //   if (w.vaultId === vaultId) {
+          //     w.authToken() = newToken;
+          //   }
+          // }
         }
       } else {
         console.error('Failed to recover from auth error for vault:', vaultId);
@@ -177,9 +180,9 @@ export class Tasker {
       const creds = v.getVaultCredentials();
       console.log('Hooking vault to tasker:', creds.vault);
       this.#watchQ.push({
+        active: true,
         memberId: creds.memberId,
         vaultId: creds.vaultId,
-        authToken: creds.authToken,
         files: [{ id: creds.vault.id, etag: creds.vault.etag }],
         vaultRef: v,
         cb: v.timeToUpdate,
@@ -198,6 +201,26 @@ export class Tasker {
   resume() {
     this.#userPaused = false;
     this.#reconcileStatus();
+  }
+
+  disableVaultWatchById(vaultId: string): boolean {
+    const item = this.#watchQ.find(w => w.vaultId === vaultId);
+    if (item) {
+      item.active = false;
+      this.#reconcileStatus();
+      return true;
+    }
+    return false;
+  }
+
+  enableVaultWatchById(vaultId: string): boolean {
+    const item = this.#watchQ.find(w => w.vaultId === vaultId);
+    if (item) {
+      item.active = true;
+      this.#reconcileStatus();
+      return true;
+    }
+    return false;
   }
 
   _msgToWorkers(msg: any) {

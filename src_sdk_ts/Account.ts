@@ -1,9 +1,9 @@
 import { createNetworkMonitor } from './NetworkUtils';
 import { Tasker } from './Tasker';
 
-import type { MemberRole, MemberStatus } from './Consts';
+import type { MemberRole, MemberStatus, CollectionType } from './Consts';
+// import type { CollectionController } from './collections/Collection';
 
-// import { MemberSlot } from './Members';
 import { VaultController } from './Vault';
 import { buildMember } from './Members';
 
@@ -44,6 +44,13 @@ export class Account extends EventTarget {
   readonly #tasker: Tasker;
   readonly #networkMonitor = createNetworkMonitor();
 
+  get collections$() {
+    return this.#accountVault.collections$;
+  }
+  get devices$() {
+    return this.#accountVault.members$;
+  }
+
   constructor(serviceUrl: string, vault: VaultController, persistent: boolean = false) {
     super();
     this.#serviceUrl = serviceUrl;
@@ -55,17 +62,28 @@ export class Account extends EventTarget {
     }
   }
 
-  getInfo(): any {
+  public getInfo(): any {
     return this.#accountVault.getAll();
   }
 
-  getServiceUrl(): string {
+  public getServiceUrl(): string {
     return this.#serviceUrl;
   }
 
-  destroy(): void {
+  public destroy(): void {
     this.#tasker.destroy();
     // this.#vault.destroy();
     this.#networkMonitor.destroy();
+  }
+
+  public isManagerMember(): boolean {
+    return this.#accountVault.isManagerMember();
+  }
+
+  public async addCollection(collectionName: string, collectionType: CollectionType): Promise<void> {
+    if (!this.isManagerMember()) {
+      throw new Error('Only manager members can add collections');
+    }
+    const newVaultManifest = await this.#accountVault.addCollection(collectionName, collectionType);
   }
 }

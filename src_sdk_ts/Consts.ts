@@ -1,7 +1,7 @@
 declare const __brand: unique symbol;
 export type MemberRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'TEMP';
 export type MemberStatus = 'ACTIVE' | 'INVITED' | 'REMOVED';
-export type CollectionType = 'VFS' | 'KEYVALUE' | 'LIST' | 'CRDTLIST';
+export type CollectionType = 'VFS' | 'KV' | 'LIST' | 'CRDTLIST';
 export type Brand<T, B> = T & { [__brand]: B };
 export type Base64<T = unknown> = string & { readonly __base64: T };
 export type Base64Encrypted<T = unknown> = string & { readonly __encrypted: T };

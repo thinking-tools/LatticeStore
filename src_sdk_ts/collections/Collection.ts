@@ -1,25 +1,25 @@
 import type { CollectionId, CollectionType, MemberId, Timestamp } from '../Consts.js';
+
+import { ReactiveValue } from '../ReactiveValue';
 // import { genId, now, uint8ArrayToBase64, uint8ArrayToHex } from '../Helpers.js';
 // import { generateRandomBytes } from '../CryptoUtils.js';
 
-// const getNewcollection = (name: string, type: collectionType, memberId: MemberId): collectionController => {
-//   return new collectionController({
-//     collectionId: genId() as collectionId,
-//     collectionType: type,
-//     collectionName: name,
-//     collectionEpoch: 1 as number,
-//     collectionKey: uint8ArrayToHex(generateRandomBytes(32)),
-//     collectionEtag: null,
-//     collectionEncryptionKeyMaterial: uint8ArrayToBase64(generateRandomBytes(32)), // Base64Encrypted<Uint8Array>
-//     collectionCreatedAt: now() as Timestamp,
-//     collectionCreatedById: memberId,
-//     collectionModifiedAt: now() as Timestamp,
-//     collectionModifiedById: memberId,
-//     collectionArchived: false,
-//     collectionArchivedAt: null,
-//     collectionToDelete: false,
-//   });
-// };
+export interface CollectionContent<T = unknown> {
+  readonly type: CollectionType;
+  readonly data$: ReactiveValue<T>;
+
+  /** Serialize for encryption/storage */
+  serialize(): Uint8Array;
+
+  /** Apply remote changes (from sync) */
+  // applyPatch(patch: unknown): void;
+
+  /** Get pending changes for sync */
+  getPendingChanges(): unknown | null;
+
+  /** Clear pending after successful sync */
+  clearPending(): void;
+}
 
 export type CollectionMinimal = {
   collectionId: CollectionId;
@@ -45,6 +45,8 @@ export type Collection = {
   collectionArchivedAt: Timestamp | null;
   collectionToDelete: boolean;
 };
+
+export const collectionFactory = (name: string, type: CollectionType): boolean => {};
 
 export class CollectionController {
   #collection: Collection | CollectionMinimal;

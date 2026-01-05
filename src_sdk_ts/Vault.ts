@@ -1,7 +1,7 @@
-import type { VaultId, VaultType, MemberId, Base64, Timestamp, Base64Encrypted } from './Consts.js';
-import type { MemberEncryptedDetail, MemberInfoBasics, MemberSlot } from './Members.js';
+import type { VaultId, VaultType, MemberId, Base64, Timestamp, Base64Encrypted } from './Consts';
+import type { MemberEncryptedDetail, MemberInfoBasics, MemberSlot } from './Members';
 import type { Collection } from './collections/Collection';
-import type { AEADCryptoKey, RawAEADKey } from './CryptoAEAD.js';
+import type { AEADCryptoKey, RawAEADKey } from './CryptoAEAD';
 import type { LoginPayload, LoginRequest } from './ApiClient';
 
 import { CryptoPQ } from './CryptoPQ';
@@ -15,6 +15,7 @@ import { getManagerKey, decryptMemberList, getCollectionKey } from './Members';
 import { CollectionController } from './collections/Collection';
 import { AEAD } from './CryptoAEAD';
 import { getMemberFromMemberSlots } from './Validators';
+import { ReactiveValue } from './ReactiveValue';
 
 export type VaultRegistrationPayload = {
   version: number;
@@ -50,7 +51,10 @@ export class VaultController {
   #isManagerMember: boolean = false;
   #managersArea: { memberList: MemberEncryptedDetail[]; key: AEADCryptoKey } | null = null;
   #collectionKey: AEADCryptoKey | null = null;
-  #collections: CollectionController[] = [];
+  // #collections: CollectionController[] = [];
+
+  readonly collections$ = new ReactiveValue<CollectionController[]>([]);
+  readonly members$ = new ReactiveValue<MemberEncryptedDetail[]>([]);
 
   // #tasker: Tasker | null = null;
   constructor(vaultManifest: Vault, etag: string, authToken: string, member: MemberInfoBasics, persistent: boolean) {
@@ -103,6 +107,7 @@ export class VaultController {
       // throw new Error('Member slot not found in vault manifest');
       return false;
     }
+
     const cipherText = base64ToUint8Array(memberSlot.memberKemCiphertext);
     const sharedKeyRaw = CryptoPQ.decapsulate(cipherText, member.kemKeys.secretKey);
     const sharedKey = await AEAD.importAEADKey(sharedKeyRaw as RawAEADKey);
@@ -127,10 +132,8 @@ export class VaultController {
         this.#collectionKey!,
         base64ToUint8Array(vault.payload.collectionsEncrypted),
       );
-      const collectionsJson = fromUint8Array(collectionsDecrypted);
-      for (const collection of JSON.parse(collectionsJson) as Collection[]) {
-        this.#collections.push(new CollectionController(collection));
-      }
+      const collections = JSON.parse(fromUint8Array(collectionsDecrypted)) as Collection[];
+      this.collections$.set(collections.map(c => new CollectionController(c)));
     }
     return true;
   };
@@ -179,7 +182,6 @@ export class VaultController {
     return {
       vaultId: this.#vaultManifest.payload.id,
       memberId: this.#activeMember.memberId,
-      authToken: this.#authToken || '',
       vault: {
         id: this.#vaultManifest.payload.id,
         etag: this.#etag,
@@ -188,31 +190,38 @@ export class VaultController {
   }
 
   listCollections(type?: string): CollectionController[] {
-    if (type) {
-      return this.#collections.filter(collection => collection.collection.collectionType === type);
-    }
-    return this.#collections;
+    const all = this.collections$.value;
+    return type ? all.filter(c => c.collection.collectionType === type) : all;
   }
 
   getCollectionById(collectionId: string): CollectionController | null {
-    for (const collection of this.#collections) {
-      if (collection.collection.collectionId === collectionId) {
-        return collection;
-      }
+    const col = this.collections$.value.find(c => c.collection.collectionId === collectionId);
+    if (col) {
+      return col;
     }
     return null;
   }
 
   getCollectionByName(name: string): CollectionController | null {
-    for (const collection of this.#collections) {
-      if (collection.collection.collectionName === name) {
-        return collection;
-      }
+    const col = this.collections$.value.find(c => c.collection.collectionName === name);
+    if (col) {
+      return col;
     }
     return null;
+  }
+  addCollection(col: CollectionController) {
+    this.collections$.update(arr => arr.push(col));
+  }
+
+  removeCollection(id: string) {
+    this.collections$.set(this.collections$.value.filter(c => c.collection.collectionId !== id));
   }
 
   timeToUpdate = () => {
     console.warn('TIME TO UPDATE VAULT DATA');
   };
+
+  isManagerMember(): boolean {
+    return this.#isManagerMember;
+  }
 }

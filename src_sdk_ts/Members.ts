@@ -29,6 +29,11 @@ export type MemberSlot = {
   memberPublicNote?: string;
 };
 
+export type MemberSlotExtended = MemberSlot & {
+  memberName: string;
+  memberPrivateNote?: string;
+};
+
 export type MemberEncryptedDetail = {
   memberId: MemberId;
   memberName: string;
