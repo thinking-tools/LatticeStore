@@ -10,6 +10,7 @@ type WatchQItem = {
   vaultId: string;
   authToken: string;
   files: Array<{ id: string; etag: string }>;
+  vaultRef: VaultController;
   cb: (result: boolean) => void;
 };
 
@@ -123,15 +124,37 @@ export class Tasker {
     }
   }
 
-  #handleWorkerMessage(workerIndex: number, event: MessageEvent) {
+  // TODO: decrease complexity by moving these methods to VaultController or simplify otherwise
+  async #handleWorkerMessage(workerIndex: number, event: MessageEvent) {
     console.log(`Worker ${workerIndex} message:`, event.data, ' connected:', this.#connected);
     const { type, vaultId, changed, error } = event.data;
     if (error) {
       console.error(`Worker ${workerIndex} reported error:`, error);
     }
-    if (type === 'watch' && changed) {
+    if (type === 'watch' && changed.length > 0) {
       const item = this.#watchQ.find(w => w.vaultId === vaultId);
       item?.cb(true);
+    }
+    if (type === 'auth-error') {
+      this.pause();
+      const item = this.#watchQ.find(w => w.vaultId === vaultId);
+      const success = await item?.vaultRef.handleAuthError();
+      if (success) {
+        const newToken = item?.vaultRef.getAuthToken();
+        if (newToken) {
+          for (const w of this.#watchQ) {
+            if (w.vaultId === vaultId) {
+              w.authToken = newToken;
+            }
+          }
+        }
+      } else {
+        console.error('Failed to recover from auth error for vault:', vaultId);
+        // TODO: remove all watch items for this vault
+        this.#watchQ = this.#watchQ.filter(w => w.vaultId !== vaultId);
+      }
+
+      this.resume();
     }
   }
 
@@ -158,6 +181,7 @@ export class Tasker {
         vaultId: creds.vaultId,
         authToken: creds.authToken,
         files: [{ id: creds.vault.id, etag: creds.vault.etag }],
+        vaultRef: v,
         cb: v.timeToUpdate,
       });
       this.#reconcileStatus();

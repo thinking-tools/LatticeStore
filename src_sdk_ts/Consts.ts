@@ -153,7 +153,7 @@ export const RESERVED_USERNAMES = [
 export const TOKEN_NAMESPACE = 'TKN';
 
 export const TIMESTAMP_TOLERANCE_MS = 1 * 60 * 1000; // 1 minute
-export const TOKEN_EXPIRATION_SECONDS = 1000 * 60 * 1; // 1 minute
+export const TOKEN_EXPIRATION_SECONDS = 1000 * 60 * 60 * 6; // 6 hours
 
 export const ETAG_TTL_SECONDS = 60 * 5; // 5 minutes
 

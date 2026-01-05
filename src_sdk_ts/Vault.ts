@@ -166,9 +166,15 @@ export class VaultController {
     this.#authToken = newToken;
   }
 
-  // getAuthToken() {
-  //   return this.#authToken;
-  // }
+  getAuthToken() {
+    return this.#authToken;
+  }
+
+  handleAuthError(): Promise<boolean> {
+    // TODO: implement token refresh logic
+    console.warn('HANDLE AUTH ERROR IN VAULT CONTROLLER');
+    return Promise.resolve(false);
+  }
 
   getVaultCredentials() {
     return {
