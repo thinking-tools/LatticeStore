@@ -1,7 +1,7 @@
 declare const __brand: unique symbol;
 export type MemberRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' | 'TEMP';
 export type MemberStatus = 'ACTIVE' | 'INVITED' | 'REMOVED';
-export type FeatureType = 'VFS' | 'KEYVALUE' | 'LIST' | 'CRDTLIST';
+export type CollectionType = 'VFS' | 'KEYVALUE' | 'LIST' | 'CRDTLIST';
 export type Brand<T, B> = T & { [__brand]: B };
 export type Base64<T = unknown> = string & { readonly __base64: T };
 export type Base64Encrypted<T = unknown> = string & { readonly __encrypted: T };
@@ -11,18 +11,18 @@ export type Hex256 = Brand<string, 'Hex256'>;
 // ID types
 export type FileId = Brand<string, 'FileId'>;
 export type AccountId = Brand<string, 'AccountId'>;
-export type FeatureId = Brand<string, 'FeatureId'>;
+export type CollectionId = Brand<string, 'CollectionId'>;
 export type MemberId = Brand<string, 'MemberId'>;
 export type ChunkId = Brand<string, 'ChunkId'>;
 export type VaultId = Brand<string, 'VaultId'>;
-export type VaultType = 'personal' | 'team';
+export type VaultType = 'account' | 'team';
 
 export const VAULTS_NAMESPACE = 'VAULTS';
 export const NAME_MAPPING = 'NAME2ID';
 export const RECOVERY_DEVICE_NAME = '__RECOVERY_DEVICE__';
 
 export const VAULT_TYPE: Record<VaultType, VaultType> = Object.freeze({
-  personal: 'personal',
+  account: 'account',
   team: 'team',
 });
 
@@ -57,6 +57,7 @@ export const IS_MANAGER_ROLE = (role: MemberRole): boolean => {
 };
 
 export const RESERVED_USERNAMES = [
+  RECOVERY_DEVICE_NAME,
   // System & Admin
   'admin',
   'administrator',
@@ -94,7 +95,7 @@ export const RESERVED_USERNAMES = [
   'dmca',
   'copyright',
 
-  // Platform features
+  // Platform Collections
   'api',
   'www',
   'mail',
@@ -170,7 +171,8 @@ export const CUSTOM_DSA_STRING = '*incredibly_unique-custom_string_for_ML-DSA&La
 export const MEMBER_ID_STRING = '*incredibly_unique-custom_string_for_MEMBER_ID&LatticeStore*';
 // export const CUSTOM_SUBKEY_ROLE_STRING = '*incredibly_unique-custom_string_for_SUBKEY_ROLE&LatticeStore*';
 export const CUSTOM_MANAGER_KEY_STRING = '*incredibly_unique-custom_string_for_MANAGER_KEY&LatticeStore*';
-export const CUSTOM_FEATURES_LIST_STRING = '*incredibly_unique-custom_string_for_FEATURES_LISTcrypt0&LatticeStore*';
+export const CUSTOM_COLLECTION_LIST_STRING =
+  '*incredibly_unique-custom_string_for_COLLECTIONS_LISTcrypt0&LatticeStore*';
 
 export const VALIDATION_RULES = {
   accountName: {

@@ -78,14 +78,14 @@ export class LatticeStoreClient {
       const registerPayload: VaultRegistrationPayload = {
         version: 1,
         name: accountName.trim(),
-        type: VAULT_TYPE.personal,
+        type: VAULT_TYPE.account,
         id: accountMember.memberId as VaultId,
         dsaPubkey: uint8ArrayToBase64(accountMember.dsaKeys.publicKey) as Base64<Uint8Array>,
         kemPubkey: uint8ArrayToBase64(accountMember.kemKeys.publicKey) as Base64<Uint8Array>,
         memberSlots: [thisDeviceCredentials.memberSlot, recoveryDeviceCredentials.memberSlot],
         managerOnlyMemberList: encryptedMemberList,
         managerOnlyArea: encryptedAccountSeed,
-        // featuresEncrypted: '' as Base64Encrypted<Feature[]>, // empty features list for now
+        // collectionsEncrypted: '' as Base64Encrypted<Collection[]>, // empty collections list for now
         keyEpoch: 0,
         createdAt: timestamp,
         updatedAt: timestamp,

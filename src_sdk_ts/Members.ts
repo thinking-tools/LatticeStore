@@ -6,7 +6,7 @@ import {
   MEMBER_STATUS,
   CUSTOM_MANAGER_KEY_STRING,
   DEFAULT_AEAD_KEY_LENGTH_BYTES,
-  CUSTOM_FEATURES_LIST_STRING,
+  CUSTOM_COLLECTION_LIST_STRING,
 } from './Consts.js';
 
 import type { MemberRole, MemberId, Base64, Base64Encrypted, Timestamp, MemberStatus } from './Consts.js';
@@ -110,13 +110,13 @@ export const getManagerKey = async (masterKeyRaw: Uint8Array): Promise<AEADCrypt
   return AEAD.importAEADKey(managersKey as RawAEADKey);
 };
 
-export const getFeaturesKey = async (masterKeyRaw: Uint8Array): Promise<AEADCryptoKey> => {
-  const featuresKey = letscShake256(
+export const getCollectionKey = async (masterKeyRaw: Uint8Array): Promise<AEADCryptoKey> => {
+  const collectionKey = letscShake256(
     masterKeyRaw,
-    toUint8Array(CUSTOM_FEATURES_LIST_STRING),
+    toUint8Array(CUSTOM_COLLECTION_LIST_STRING),
     DEFAULT_AEAD_KEY_LENGTH_BYTES,
   ) as RawAEADKey;
-  return AEAD.importAEADKey(featuresKey as RawAEADKey);
+  return AEAD.importAEADKey(collectionKey as RawAEADKey);
 };
 
 export const encryptMemberList = async (

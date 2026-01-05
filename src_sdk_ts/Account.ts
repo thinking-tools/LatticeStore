@@ -39,7 +39,7 @@ export const loginAccount = async (
 
 export class Account extends EventTarget {
   readonly #serviceUrl: string;
-  readonly #personalVault: VaultController;
+  readonly #accountVault: VaultController;
   // readonly #vaults: Map<string, VaultController> = new Map();
   readonly #tasker: Tasker;
   readonly #networkMonitor = createNetworkMonitor();
@@ -48,15 +48,15 @@ export class Account extends EventTarget {
     super();
     this.#serviceUrl = serviceUrl;
     this.#tasker = new Tasker(this.#networkMonitor, serviceUrl);
-    this.#personalVault = vault;
+    this.#accountVault = vault;
     if (persistent) {
-      // this.#personalVault.setPersistent(true);
-      this.#tasker.hookVault(this.#personalVault);
+      // this.#accountVault.setPersistent(true);
+      this.#tasker.hookVault(this.#accountVault);
     }
   }
 
   getInfo(): any {
-    return this.#personalVault.getAll();
+    return this.#accountVault.getAll();
   }
 
   getServiceUrl(): string {

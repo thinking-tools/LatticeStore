@@ -32,7 +32,7 @@ const _isValidVault = (body: Vault): boolean => {
     _validateFields(body, C.vaultManifestBody.requiredFields) &&
     _validateFields(body.payload, C.vaultManifestPayload.requiredFields) &&
     _validateAccountId(body.payload.id) &&
-    (body.payload.type === VAULT_TYPE.personal
+    (body.payload.type === VAULT_TYPE.account
       ? _validateAccountName(body.payload.name)
       : _validateVaultName(body.payload.name)) &&
     _validateVaultMemberSlots(body.payload.memberSlots)
@@ -140,7 +140,7 @@ const _isValidLoginPayload = (body: LoginRequest): boolean => {
   return true;
 };
 export const validateRegistrationRequest = async (body: Vault): Promise<boolean> => {
-  return isValidVaultManifest(body, VAULT_TYPE.personal);
+  return isValidVaultManifest(body, VAULT_TYPE.account);
 };
 
 export const validateLoginRequest = async (body: LoginRequest, vaultManifest: Vault): Promise<boolean> => {

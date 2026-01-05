@@ -7,7 +7,7 @@ import {
   CUSTOM_DSA_STRING,
   DEFAULT_AEAD_KEY_LENGTH_BYTES,
   IS_MANAGER_ROLE,
-  CUSTOM_FEATURES_LIST_STRING,
+  CUSTOM_COLLECTION_LIST_STRING,
   MEMBER_ID_STRING,
 } from './Consts.js';
 
@@ -54,7 +54,7 @@ export const deriveSeeds = (masterSeed: Uint8Array) => ({
 export const deriveKeyForRole = (role: MemberRole, rootKey: Uint8Array): Uint8Array =>
   IS_MANAGER_ROLE(role)
     ? rootKey
-    : letscShake256(rootKey, toUint8Array(CUSTOM_FEATURES_LIST_STRING), DEFAULT_AEAD_KEY_LENGTH_BYTES);
+    : letscShake256(rootKey, toUint8Array(CUSTOM_COLLECTION_LIST_STRING), DEFAULT_AEAD_KEY_LENGTH_BYTES);
 
 export const getMemberIdFromPubkey = (dsaPublicKey: Uint8Array): string =>
   uint8ArrayToHex(letscShake256(dsaPublicKey, toUint8Array(MEMBER_ID_STRING), 32)).toLowerCase();

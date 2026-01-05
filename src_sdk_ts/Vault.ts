@@ -1,26 +1,25 @@
 import type { VaultId, VaultType, MemberId, Base64, Timestamp, Base64Encrypted } from './Consts.js';
 import type { MemberEncryptedDetail, MemberInfoBasics, MemberSlot } from './Members.js';
-import type { Feature } from './features/Features';
+import type { Collection } from './collections/Collection';
 import type { AEADCryptoKey, RawAEADKey } from './CryptoAEAD.js';
 import type { LoginPayload, LoginRequest } from './ApiClient';
 
 import { CryptoPQ } from './CryptoPQ';
 import { sha256 } from './CryptoUtils';
-import { generateCanonicalJSON, now, uint8ArrayToBase64 } from './Helpers';
+import { generateCanonicalJSON, now, uint8ArrayToBase64, base64ToUint8Array, fromUint8Array } from './Helpers';
 import { makeRequest } from './ApiClient';
 import { isValidVaultManifest } from './Validators';
 import { VAULT_TYPE } from './Consts';
-import { IS_MANAGER_ROLE } from './Consts.js';
-import { getManagerKey, decryptMemberList, getFeaturesKey } from './Members.js';
-import { FeatureController } from './features/Features.js';
-import { AEAD } from './CryptoAEAD.js';
-import { getMemberFromMemberSlots } from './Validators.js';
-import { base64ToUint8Array, fromUint8Array } from './Helpers.js';
+import { IS_MANAGER_ROLE } from './Consts';
+import { getManagerKey, decryptMemberList, getCollectionKey } from './Members';
+import { CollectionController } from './collections/Collection';
+import { AEAD } from './CryptoAEAD';
+import { getMemberFromMemberSlots } from './Validators';
 
 export type VaultRegistrationPayload = {
   version: number;
   name: string; // mutable, can be changed by owner/admin
-  type: VaultType; // personal or team(TBD) [TODO]
+  type: VaultType; // account or team(TBD) [TODO]
   id: VaultId; // redundant but useful for verification
   dsaPubkey: Base64<Uint8Array>; // for signature verification of manifests
   kemPubkey: Base64<Uint8Array>; // for key encapsulation
@@ -28,7 +27,7 @@ export type VaultRegistrationPayload = {
   managerOnlyMemberList: Base64Encrypted<MemberEncryptedDetail[]>; // managers only access
   managerOnlyArea: Base64Encrypted<Uint8Array>; // placeholder for future manager-only data
   keyEpoch: number; // increments when vault keys are rotated
-  featuresEncrypted?: Base64Encrypted<Feature[]>; // Just pointers to feature channels, not feature state
+  collectionsEncrypted?: Base64Encrypted<Collection[]>; // Just pointers to collection channels, not collection state
   createdAt: Timestamp;
   updatedAt: Timestamp;
 };
@@ -50,8 +49,8 @@ export class VaultController {
   #aeadVaultKey: AEADCryptoKey | null = null;
   #isManagerMember: boolean = false;
   #managersArea: { memberList: MemberEncryptedDetail[]; key: AEADCryptoKey } | null = null;
-  #featuresKey: AEADCryptoKey | null = null;
-  #features: FeatureController[] = [];
+  #collectionKey: AEADCryptoKey | null = null;
+  #collections: CollectionController[] = [];
 
   // #tasker: Tasker | null = null;
   constructor(vaultManifest: Vault, etag: string, authToken: string, member: MemberInfoBasics, persistent: boolean) {
@@ -86,7 +85,7 @@ export class VaultController {
     }
     // validate vault payload and extract account info
     const vaultManifest = response.accountVault;
-    if (!isValidVaultManifest(vaultManifest, VAULT_TYPE.personal) || vaultManifest.payload.name !== accountName) {
+    if (!isValidVaultManifest(vaultManifest, VAULT_TYPE.account) || vaultManifest.payload.name !== accountName) {
       throw new Error('Invalid vault manifest received from server');
     }
 
@@ -118,19 +117,19 @@ export class VaultController {
         memberList: await decryptMemberList(vault.payload.managerOnlyMemberList, managersKey),
       };
       this.#isManagerMember = true;
-      this.#featuresKey = await getFeaturesKey(aeadMasterKeyRaw as Uint8Array);
+      this.#collectionKey = await getCollectionKey(aeadMasterKeyRaw as Uint8Array);
     } else {
       this.#isManagerMember = false;
-      this.#featuresKey = this.#aeadVaultKey;
+      this.#collectionKey = this.#aeadVaultKey;
     }
-    if (vault.payload.featuresEncrypted && vault.payload.featuresEncrypted.length > 0) {
-      const featuresDecrypted = await AEAD.decrypt(
-        this.#featuresKey!,
-        base64ToUint8Array(vault.payload.featuresEncrypted),
+    if (vault.payload.collectionsEncrypted && vault.payload.collectionsEncrypted.length > 0) {
+      const collectionsDecrypted = await AEAD.decrypt(
+        this.#collectionKey!,
+        base64ToUint8Array(vault.payload.collectionsEncrypted),
       );
-      const featuresJson = fromUint8Array(featuresDecrypted);
-      for (const feature of JSON.parse(featuresJson) as Feature[]) {
-        this.#features.push(new FeatureController(feature));
+      const collectionsJson = fromUint8Array(collectionsDecrypted);
+      for (const collection of JSON.parse(collectionsJson) as Collection[]) {
+        this.#collections.push(new CollectionController(collection));
       }
     }
     return true;
@@ -188,26 +187,26 @@ export class VaultController {
     };
   }
 
-  listFeatures(type?: string): FeatureController[] {
+  listCollections(type?: string): CollectionController[] {
     if (type) {
-      return this.#features.filter(feature => feature.feature.featureType === type);
+      return this.#collections.filter(collection => collection.collection.collectionType === type);
     }
-    return this.#features;
+    return this.#collections;
   }
 
-  getFeatureById(featureId: string): FeatureController | null {
-    for (const feature of this.#features) {
-      if (feature.feature.featureId === featureId) {
-        return feature;
+  getCollectionById(collectionId: string): CollectionController | null {
+    for (const collection of this.#collections) {
+      if (collection.collection.collectionId === collectionId) {
+        return collection;
       }
     }
     return null;
   }
 
-  getFeatureByName(name: string): FeatureController | null {
-    for (const feature of this.#features) {
-      if (feature.feature.featureName === name) {
-        return feature;
+  getCollectionByName(name: string): CollectionController | null {
+    for (const collection of this.#collections) {
+      if (collection.collection.collectionName === name) {
+        return collection;
       }
     }
     return null;

@@ -1,6 +1,7 @@
 import { S3mini, sanitizeETag, runInBatches } from 's3mini';
 import { Keyv } from 'keyv';
 import { NAME_MAPPING, ETAG_TTL_SECONDS } from './Consts';
+import { VAULT_TYPE } from './Consts';
 
 import type { Vault } from './Vault';
 import { checkListItem } from './ApiClient';
@@ -48,14 +49,14 @@ export class Accounts {
     return null;
   }
 
-  public async getPersonalVaultIdByName(vaultName: string): Promise<[Vault | null, string | null]> {
+  public async getAccountVaultIdByName(vaultName: string): Promise<[Vault | null, string | null]> {
     const cached = await this.#vaultRedis.get(_redisNameMappingKey(vaultName));
     if (cached !== undefined) {
       const [vault, etag] = await Promise.all([
         this.#vaultRedis.get(_redisManifestKey(cached)),
         this.#vaultRedis.get(_redisManifestEtagKey(cached)),
       ]);
-      if (vault && vault.payload.type === 'personal' && etag) {
+      if (vault && vault.payload.type === VAULT_TYPE.account && etag) {
         return [vault, etag];
       } else {
         // s3 fallback
@@ -63,7 +64,7 @@ export class Accounts {
         if (s3Object) {
           const etag = sanitizeETag(s3Object.headers.get('etag') as string);
           const s3vault: Vault = await s3Object.json();
-          if (s3vault.payload.type === 'personal') {
+          if (s3vault.payload.type === VAULT_TYPE.account) {
             await Promise.all([
               this.#vaultRedis.set(_redisManifestKey(cached), s3vault),
               this.#vaultRedis.set(_redisManifestEtagKey(cached), etag),
