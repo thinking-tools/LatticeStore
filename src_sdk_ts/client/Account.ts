@@ -1,7 +1,7 @@
 import { createNetworkMonitor } from './NetworkUtils';
 import { Tasker } from './Tasker';
 
-import type { MemberRole, MemberStatus, CollectionType } from './Consts';
+import type { MemberRole, MemberStatus } from '../shared/Consts'; // CollectionType
 // import type { CollectionController } from './collections/Collection';
 
 import { VaultController } from './Vault';
@@ -80,10 +80,11 @@ export class Account extends EventTarget {
     return this.#accountVault.isManagerMember();
   }
 
-  public async addCollection(collectionName: string, collectionType: CollectionType): Promise<void> {
-    if (!this.isManagerMember()) {
-      throw new Error('Only manager members can add collections');
-    }
-    const newVaultManifest = await this.#accountVault.addCollection(collectionName, collectionType);
-  }
+  // public async addCollection(collectionName: string, collectionType: CollectionType): Promise<void> {
+  //   if (!this.isManagerMember()) {
+  //     throw new Error('Only manager members can add collections');
+  //   }
+  //   return;
+  //   // const newVaultManifest = await this.#accountVault.addCollection(collectionName, collectionType);
+  // }
 }

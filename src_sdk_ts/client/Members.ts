@@ -1,15 +1,15 @@
-import { CryptoPQ, CryptoPQKeyPair } from './CryptoPQ';
-import { deriveSeeds, deriveKeyForRole, getMemberIdFromPubkey, letscShake256 } from './CryptoUtils';
-import { AEAD, AEADCryptoKey, RawAEADKey } from './CryptoAEAD';
-import { uint8ArrayToBase64, now, toUint8Array, fromUint8Array, base64ToUint8Array } from './Helpers';
+import { CryptoPQ, CryptoPQKeyPair } from '../crypto/CryptoPQ';
+import { deriveSeeds, deriveKeyForRole, getMemberIdFromPubkey, letscShake256 } from '../crypto/CryptoUtils';
+import { AEAD, AEADCryptoKey, RawAEADKey } from '../crypto/CryptoAEAD';
+import { uint8ArrayToBase64, now, toUint8Array, fromUint8Array, base64ToUint8Array } from '../shared/Helpers';
 import {
   MEMBER_STATUS,
   CUSTOM_MANAGER_KEY_STRING,
   DEFAULT_AEAD_KEY_LENGTH_BYTES,
   CUSTOM_COLLECTION_LIST_STRING,
-} from './Consts.js';
+} from '../shared/Consts.js';
 
-import type { MemberRole, MemberId, Base64, Base64Encrypted, Timestamp, MemberStatus } from './Consts.js';
+import type { MemberRole, MemberId, Base64, Base64Encrypted, Timestamp, MemberStatus } from '../shared/Consts.js';
 
 export type MemberCredentials = {
   memberEncryptedDetail: MemberEncryptedDetail;

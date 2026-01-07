@@ -1,4 +1,4 @@
-import { DEFAULT_AEAD_KEY_LENGTH_BYTES } from './Consts';
+import { DEFAULT_AEAD_KEY_LENGTH_BYTES } from '../shared/Consts';
 
 /**
  * AEAD (Authenticated Encryption with Associated Data)

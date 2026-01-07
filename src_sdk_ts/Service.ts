@@ -1,15 +1,15 @@
 import { S3mini } from 's3mini';
-import { validateRegistrationRequest, validateLoginRequest } from './Validators';
-import { Accounts } from './Accounts';
-import { Admin } from './admin/Admin';
-import { Tokens } from './Tokens';
-import { VAULTS_NAMESPACE } from './Consts';
+import { validateRegistrationRequest, validateLoginRequest } from './shared/Validators';
+import { Accounts } from './server/Accounts';
+import { Admin } from './server/admin/Admin';
+import { Tokens } from './server/Tokens';
+import { VAULTS_NAMESPACE } from './shared/Consts';
 import Keyv from 'keyv';
 
 import type { S3Config } from 's3mini';
 import type { KeyvStoreAdapter } from 'keyv';
-import type { RegisterResponse, LoginRequest, LoginResponse, CheckRequest, CheckResponse } from './ApiClient';
-import type { Vault } from './Vault';
+import type { RegisterResponse, LoginRequest, LoginResponse, CheckRequest, CheckResponse } from './client/ApiClient';
+import type { Vault } from './client/Vault';
 
 export class LatticeStoreService {
   readonly #s3: S3mini;

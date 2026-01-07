@@ -1,18 +1,18 @@
 'use strict';
 
-import { makeRequest } from './ApiClient';
-import { generateRandomBytes, sha256 } from './CryptoUtils';
-import { AEAD } from './CryptoAEAD';
-import { CryptoPQ } from './CryptoPQ';
-import { buildMember, createNewCredentials, encryptMemberList, getManagerKey } from './Members';
-import { ROLE, VAULT_TYPE } from './Consts.js';
-import { loginAccount } from './Account';
-import { uint8ArrayToBase64, now, generateCanonicalJSON } from './Helpers';
-import { DEFAULT_SEED_LENGTH_BYTES, RECOVERY_DEVICE_NAME } from './Consts';
+import { makeRequest } from './client/ApiClient';
+import { generateRandomBytes, sha256 } from './crypto/CryptoUtils';
+import { AEAD } from './crypto/CryptoAEAD';
+import { CryptoPQ } from './crypto/CryptoPQ';
+import { buildMember, createNewCredentials, encryptMemberList, getManagerKey } from './client/Members';
+import { ROLE, VAULT_TYPE } from './shared/Consts.js';
+import { loginAccount } from './client/Account';
+import { uint8ArrayToBase64, now, generateCanonicalJSON } from './shared/Helpers';
+import { DEFAULT_SEED_LENGTH_BYTES, RECOVERY_DEVICE_NAME } from './shared/Consts';
 // import { VaultController } from './Vault';
 
-import type { VaultId, Base64, Base64Encrypted } from './Consts.js';
-import type { VaultRegistrationPayload, Vault } from './Vault';
+import type { VaultId, Base64, Base64Encrypted } from './shared/Consts.js';
+import type { VaultRegistrationPayload, Vault } from './client/Vault';
 
 const _verifySecurityContext = async () => {
   const checks = {

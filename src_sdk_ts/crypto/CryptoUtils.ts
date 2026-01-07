@@ -1,5 +1,5 @@
 import { cshake256 } from '@noble/hashes/sha3-addons.js';
-import { toUint8Array, uint8ArrayToHex } from './Helpers.js';
+import { toUint8Array, uint8ArrayToHex } from '../shared/Helpers.js';
 import {
   KEM_KEY_LENGTH_BYTES,
   DSA_KEY_LENGTH_BYTES,
@@ -9,9 +9,9 @@ import {
   IS_MANAGER_ROLE,
   CUSTOM_COLLECTION_LIST_STRING,
   MEMBER_ID_STRING,
-} from './Consts.js';
+} from '../shared/Consts.js';
 
-import type { MemberRole } from './Consts.js';
+import type { MemberRole } from '../shared/Consts.js';
 
 export class CryptoUtilsError extends Error {
   constructor(message: string, public readonly code: string) {

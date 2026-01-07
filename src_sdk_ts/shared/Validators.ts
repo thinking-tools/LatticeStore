@@ -1,11 +1,11 @@
-import { sha256 } from './CryptoUtils';
-import { CryptoPQ, ML_DSA_PUBLIC_KEY_SIZE, ML_DSA_SIGNATURE_SIZE } from './CryptoPQ';
+import { sha256 } from '../crypto/CryptoUtils';
+import { CryptoPQ, ML_DSA_PUBLIC_KEY_SIZE, ML_DSA_SIGNATURE_SIZE } from '../crypto/CryptoPQ';
 import { base64ToUint8Array, generateCanonicalJSON, now } from './Helpers';
 import { VALIDATION_RULES as C, RESERVED_USERNAMES, ROLE, VAULT_TYPE, TIMESTAMP_TOLERANCE_MS } from './Consts';
 
-import type { LoginRequest } from './ApiClient';
-import type { MemberSlot } from './Members.js';
-import type { Vault } from './Vault.js';
+import type { LoginRequest } from '../client/ApiClient';
+import type { MemberSlot } from '../client/Members.js';
+import type { Vault } from '../client/Vault.js';
 import type { VaultType } from './Consts.js';
 
 const _isTimestampValid = (clientTime: number): boolean => {

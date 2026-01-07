@@ -1,6 +1,6 @@
-import type { CollectionId, CollectionType, MemberId, Timestamp } from '../Consts.js';
+import type { CollectionId, CollectionType, MemberId, Timestamp } from '../../shared/Consts.js';
 
-import { ReactiveValue } from '../ReactiveValue';
+import { ReactiveValue } from '../ReactiveValue.js';
 // import { genId, now, uint8ArrayToBase64, uint8ArrayToHex } from '../Helpers.js';
 // import { generateRandomBytes } from '../CryptoUtils.js';
 
@@ -46,7 +46,7 @@ export type Collection = {
   collectionToDelete: boolean;
 };
 
-export const collectionFactory = (name: string, type: CollectionType): boolean => {};
+// export const collectionFactory = (name: string, type: CollectionType): boolean => {};
 
 export class CollectionController {
   #collection: Collection | CollectionMinimal;

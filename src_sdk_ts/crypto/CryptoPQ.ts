@@ -1,7 +1,7 @@
 import { ml_kem1024 } from '@noble/post-quantum/ml-kem.js';
 import { ml_dsa87 as ml_dsa } from '@noble/post-quantum/ml-dsa.js';
 import { generateRandomBytes } from './CryptoUtils.js';
-import { toUint8Array } from './Helpers.js';
+import { toUint8Array } from '../shared/Helpers.js';
 
 export type CryptoPQKeyPair = {
   secretKey: Uint8Array;

@@ -1,8 +1,8 @@
-import { generateRandomBytes } from './CryptoUtils';
+import { generateRandomBytes } from '../crypto/CryptoUtils';
 
-import type { LoginPayload } from './ApiClient';
+import type { LoginPayload } from '../client/ApiClient';
 import type { Timestamp } from './Consts.js';
-import type { VaultRegistrationPayload } from './Vault';
+import type { VaultRegistrationPayload } from '../client/Vault';
 
 export const encoder = new TextEncoder();
 export const decoder = new TextDecoder();

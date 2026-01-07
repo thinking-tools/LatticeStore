@@ -1,20 +1,20 @@
-import type { VaultId, VaultType, MemberId, Base64, Timestamp, Base64Encrypted } from './Consts';
+import type { VaultId, VaultType, MemberId, Base64, Timestamp, Base64Encrypted } from '../shared/Consts';
 import type { MemberEncryptedDetail, MemberInfoBasics, MemberSlot } from './Members';
 import type { Collection } from './collections/Collection';
-import type { AEADCryptoKey, RawAEADKey } from './CryptoAEAD';
-import type { LoginPayload, LoginRequest } from './ApiClient';
+import type { AEADCryptoKey, RawAEADKey } from '../crypto/CryptoAEAD';
+import type { LoginPayload, LoginRequest } from './ApiClient.js';
 
-import { CryptoPQ } from './CryptoPQ';
-import { sha256 } from './CryptoUtils';
-import { generateCanonicalJSON, now, uint8ArrayToBase64, base64ToUint8Array, fromUint8Array } from './Helpers';
-import { makeRequest } from './ApiClient';
-import { isValidVaultManifest } from './Validators';
-import { VAULT_TYPE } from './Consts';
-import { IS_MANAGER_ROLE } from './Consts';
+import { CryptoPQ } from '../crypto/CryptoPQ';
+import { sha256 } from '../crypto/CryptoUtils';
+import { generateCanonicalJSON, now, uint8ArrayToBase64, base64ToUint8Array, fromUint8Array } from '../shared/Helpers';
+import { makeRequest } from './ApiClient.js';
+import { isValidVaultManifest } from '../shared/Validators';
+import { VAULT_TYPE } from '../shared/Consts';
+import { IS_MANAGER_ROLE } from '../shared/Consts';
 import { getManagerKey, decryptMemberList, getCollectionKey } from './Members';
 import { CollectionController } from './collections/Collection';
-import { AEAD } from './CryptoAEAD';
-import { getMemberFromMemberSlots } from './Validators';
+import { AEAD } from '../crypto/CryptoAEAD';
+import { getMemberFromMemberSlots } from '../shared/Validators';
 import { ReactiveValue } from './ReactiveValue';
 
 export type VaultRegistrationPayload = {

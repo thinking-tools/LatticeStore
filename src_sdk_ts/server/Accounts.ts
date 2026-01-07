@@ -1,10 +1,9 @@
 import { S3mini, sanitizeETag, runInBatches } from 's3mini';
 import { Keyv } from 'keyv';
-import { NAME_MAPPING, ETAG_TTL_SECONDS } from './Consts';
-import { VAULT_TYPE } from './Consts';
+import { NAME_MAPPING, ETAG_TTL_SECONDS, VAULT_TYPE } from '../shared/Consts';
 
-import type { Vault } from './Vault';
-import { checkListItem } from './ApiClient';
+import type { Vault } from '../client/Vault';
+import { checkListItem } from '../client/ApiClient';
 
 const _s3manifestKey = (vaultId: string) => `${vaultId}/${vaultId}-manifest.json`;
 const _redisManifestKey = (vaultId: string) => `${vaultId}::manifest`;
