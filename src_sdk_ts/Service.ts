@@ -3,19 +3,22 @@ import { validateRegistrationRequest, validateLoginRequest } from './shared/Vali
 import { Accounts } from './server/Accounts';
 import { Admin } from './server/admin/Admin';
 import { Tokens } from './server/Tokens';
-import { VAULTS_NAMESPACE } from './shared/Consts';
+import { Chunks } from './server/Chunks';
+import { VAULTS_NAMESPACE, CHUNKS_NAMESPACE } from './shared/Consts';
 import Keyv from 'keyv';
 
 import type { S3Config } from 's3mini';
 import type { KeyvStoreAdapter } from 'keyv';
 import type { RegisterResponse, LoginRequest, LoginResponse, CheckRequest, CheckResponse } from './client/ApiClient';
 import type { Vault } from './client/Vault';
+import type { UploadResult } from './server/Chunks';
 
 export class LatticeStoreService {
   readonly #s3: S3mini;
   readonly #vaultRedis: Keyv;
   readonly #accounts: Accounts;
   readonly #tokens: Tokens;
+  readonly #chunks: Chunks;
 
   constructor(S3config: S3Config, adapterFactory: () => KeyvStoreAdapter) {
     this.#s3 = new S3mini(S3config);
@@ -26,8 +29,14 @@ export class LatticeStoreService {
       serialize: JSON.stringify,
       deserialize: JSON.parse,
     });
+    const chunkCache = new Keyv({
+      store: adapterFactory(),
+      useKeyPrefix: false,
+      namespace: CHUNKS_NAMESPACE,
+    });
     this.#accounts = new Accounts(this.#s3, this.#vaultRedis);
     this.#tokens = new Tokens(adapterFactory());
+    this.#chunks = new Chunks(this.#s3, chunkCache);
   }
 
   public async register(body: Vault): Promise<RegisterResponse> {
@@ -118,6 +127,30 @@ export class LatticeStoreService {
         changed: [],
       };
     }
+  }
+
+  public async upload(headers: Headers, body: ArrayBuffer): Promise<UploadResult> {
+    const authToken = headers.get('Authorization')?.split(' ')[1];
+    const memberId = headers.get('x-member-id');
+    const vaultId = headers.get('x-vault-id');
+    const chunkKey = headers.get('x-chunk-key');
+
+    if (!authToken || !memberId || !vaultId || !chunkKey) {
+      return { ok: false, status: 400, message: 'Missing required headers' };
+    }
+
+    const valid = await this.#tokens.isValidToken(memberId, vaultId, authToken);
+    if (!valid) {
+      return { ok: false, status: 401, message: 'Invalid token' };
+    }
+
+    return this.#chunks.upload(
+      vaultId,
+      chunkKey,
+      body,
+      headers.get('If-Match') ?? undefined,
+      headers.get('If-None-Match') ?? undefined,
+    );
   }
 
   // // ONLY FOR DEVELOPMENT AND TESTING PURPOSES

@@ -1,11 +1,11 @@
-import { createNetworkMonitor } from './NetworkUtils';
-import { Tasker } from './Tasker';
-
-import type { MemberRole, MemberStatus } from '../shared/Consts'; // CollectionType
-// import type { CollectionController } from './collections/Collection';
+import type { DataSource, UploadOptions } from './Tasker';
+import type { MemberRole, MemberStatus, FileId } from '../shared/Consts'; // CollectionType
+import type { RawAEADKey } from '../crypto/CryptoAEAD';
 
 import { VaultController } from './Vault';
 import { buildMember } from './Members';
+import { createNetworkMonitor } from './NetworkUtils';
+import { Tasker } from './Tasker';
 
 // import { Feature } from './features/Features';
 // import type { FeatureType } from './features/Features';
@@ -44,19 +44,23 @@ export class Account extends EventTarget {
   readonly #tasker: Tasker;
   readonly #networkMonitor = createNetworkMonitor();
 
-  get collections$() {
+  public get collections$() {
     return this.#accountVault.collections$;
   }
-  get devices$() {
+  public get devices$() {
     return this.#accountVault.members$;
   }
 
-  constructor(serviceUrl: string, vault: VaultController, persistent: boolean = false) {
+  public get tasks$() {
+    return this.#tasker.tasks;
+  }
+
+  constructor(serviceUrl: string, vault: VaultController, keepAlive: boolean = false) {
     super();
     this.#serviceUrl = serviceUrl;
     this.#tasker = new Tasker(this.#networkMonitor, serviceUrl);
     this.#accountVault = vault;
-    if (persistent) {
+    if (keepAlive) {
       // this.#accountVault.setPersistent(true);
       this.#tasker.hookVault(this.#accountVault);
     }
@@ -78,6 +82,10 @@ export class Account extends EventTarget {
 
   public isManagerMember(): boolean {
     return this.#accountVault.isManagerMember();
+  }
+
+  public upload(fileId: FileId, data: DataSource, encKey: RawAEADKey, options?: UploadOptions) {
+    return this.#tasker.upload(this.#accountVault, fileId, data, encKey, options);
   }
 
   // public async addCollection(collectionName: string, collectionType: CollectionType): Promise<void> {

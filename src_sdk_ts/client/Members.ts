@@ -50,7 +50,7 @@ export type MemberSecrets = {
 };
 
 export type MemberInfoBasics = {
-  memberId: string;
+  memberId: MemberId;
   memberSeed: Uint8Array;
   dsaKeys: CryptoPQKeyPair;
   kemKeys: CryptoPQKeyPair;

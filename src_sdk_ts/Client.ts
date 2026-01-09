@@ -6,7 +6,7 @@ import { AEAD } from './crypto/CryptoAEAD';
 import { CryptoPQ } from './crypto/CryptoPQ';
 import { buildMember, createNewCredentials, encryptMemberList, getManagerKey } from './client/Members';
 import { ROLE, VAULT_TYPE } from './shared/Consts.js';
-import { loginAccount } from './client/Account';
+import { Account, loginAccount } from './client/Account';
 import { uint8ArrayToBase64, now, generateCanonicalJSON } from './shared/Helpers';
 import { DEFAULT_SEED_LENGTH_BYTES, RECOVERY_DEVICE_NAME } from './shared/Consts';
 // import { VaultController } from './Vault';
@@ -34,6 +34,25 @@ const _verifySecurityContext = async () => {
   return checks;
 };
 
+/* Client class to interact with LatticeStore Service
+ *
+ * Example usage:
+ * ```ts
+ * import { LatticeStoreClient } from 'lattice-store-sdk';
+ *
+ * const client = new LatticeStoreClient('https://latticestore.example.com');
+ *
+ * // Register a new account
+ * const registrationResult = await client.register('MyAccount', 'MyDeviceName', myDeviceSeed);
+ * console.log('Registration successful:', registrationResult);
+ *
+ * // Login to an existing account
+ * const account = await client.login('MyAccount', myDeviceSeed);
+ * console.log('Logged in account:', account);
+ * ```
+ *
+ *
+ */
 export class LatticeStoreClient {
   private _serviceUrl: string;
   constructor(serviceUrl: string) {
@@ -79,7 +98,7 @@ export class LatticeStoreClient {
         version: 1,
         name: accountName.trim(),
         type: VAULT_TYPE.account,
-        id: accountMember.memberId as VaultId,
+        id: accountMember.memberId as unknown as VaultId,
         dsaPubkey: uint8ArrayToBase64(accountMember.dsaKeys.publicKey) as Base64<Uint8Array>,
         kemPubkey: uint8ArrayToBase64(accountMember.kemKeys.publicKey) as Base64<Uint8Array>,
         memberSlots: [thisDeviceCredentials.memberSlot, recoveryDeviceCredentials.memberSlot],
@@ -125,7 +144,11 @@ export class LatticeStoreClient {
     }
   }
 
-  public async login(accountName: string, deviceSeed: Uint8Array, service: string = this._serviceUrl) {
+  public async login(
+    accountName: string,
+    deviceSeed: Uint8Array,
+    service: string = this._serviceUrl,
+  ): Promise<Account | null> {
     try {
       // TODO implement switch later
       const persistentConnection = true;

@@ -97,6 +97,7 @@ export interface RequestOptions {
 // ===== RESPONSE PARSERS =====
 
 export class ResponseParser {
+  readonly etag?: string;
   constructor(private response: Response) {}
 
   /**

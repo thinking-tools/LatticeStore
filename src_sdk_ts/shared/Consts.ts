@@ -15,9 +15,11 @@ export type CollectionId = Brand<string, 'CollectionId'>;
 export type MemberId = Brand<string, 'MemberId'>;
 export type ChunkId = Brand<string, 'ChunkId'>;
 export type VaultId = Brand<string, 'VaultId'>;
+export type TaskId = Brand<string, 'TaskId'>;
 export type VaultType = 'account' | 'team';
 
 export const VAULTS_NAMESPACE = 'VAULTS';
+export const CHUNKS_NAMESPACE = 'CHNKS';
 export const NAME_MAPPING = 'NAME2ID';
 export const RECOVERY_DEVICE_NAME = '__RECOVERY_DEVICE__';
 
@@ -151,11 +153,15 @@ export const RESERVED_USERNAMES = [
   'receipt',
 ];
 
+export const KV_KEY_SIZE_LIMIT_BYTES = 64;
+
 export const TOKEN_NAMESPACE = 'TKN';
 
+export const CHUNK_SIZE = 8 * 1024 * 1024; // 8 MB
 export const TIMESTAMP_TOLERANCE_MS = 1 * 60 * 1000; // 1 minute
 export const TOKEN_EXPIRATION_SECONDS = 1000 * 60 * 60 * 6; // 6 hours
 
+export const CHUNK_TTL_SECONDS = 60 * 15; // 15 minutes
 export const ETAG_TTL_SECONDS = 60 * 5; // 5 minutes
 
 export const KEM_KEY_LENGTH_BYTES = 64;

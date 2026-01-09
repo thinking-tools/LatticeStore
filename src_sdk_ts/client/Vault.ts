@@ -2,12 +2,12 @@ import type { VaultId, VaultType, MemberId, Base64, Timestamp, Base64Encrypted }
 import type { MemberEncryptedDetail, MemberInfoBasics, MemberSlot } from './Members';
 import type { Collection } from './collections/Collection';
 import type { AEADCryptoKey, RawAEADKey } from '../crypto/CryptoAEAD';
-import type { LoginPayload, LoginRequest } from './ApiClient.js';
+import type { LoginPayload, LoginRequest } from './ApiClient';
 
 import { CryptoPQ } from '../crypto/CryptoPQ';
 import { sha256 } from '../crypto/CryptoUtils';
 import { generateCanonicalJSON, now, uint8ArrayToBase64, base64ToUint8Array, fromUint8Array } from '../shared/Helpers';
-import { makeRequest } from './ApiClient.js';
+import { makeRequest } from './ApiClient';
 import { isValidVaultManifest } from '../shared/Validators';
 import { VAULT_TYPE } from '../shared/Consts';
 import { IS_MANAGER_ROLE } from '../shared/Consts';
@@ -133,7 +133,11 @@ export class VaultController {
         base64ToUint8Array(vault.payload.collectionsEncrypted),
       );
       const collections = JSON.parse(fromUint8Array(collectionsDecrypted)) as Collection[];
-      this.collections$.set(collections.map(c => new CollectionController(c)));
+      this.collections$.set(
+        collections.map(
+          c => new CollectionController(c, c.collectionKey as unknown as RawAEADKey, vault.payload.id as VaultId),
+        ),
+      );
     }
     return true;
   };
@@ -182,6 +186,7 @@ export class VaultController {
     return {
       vaultId: this.#vaultManifest.payload.id,
       memberId: this.#activeMember.memberId,
+      authToken: this.#authToken,
       vault: {
         id: this.#vaultManifest.payload.id,
         etag: this.#etag,

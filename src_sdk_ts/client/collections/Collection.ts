@@ -1,23 +1,16 @@
-import type { CollectionId, CollectionType, MemberId, Timestamp } from '../../shared/Consts.js';
+import type { CollectionId, CollectionType, MemberId, VaultId, Timestamp } from '../../shared/Consts.js';
 
 import { ReactiveValue } from '../ReactiveValue.js';
+import { AEAD } from '../../crypto/CryptoAEAD.js';
+import type { AEADCryptoKey, RawAEADKey } from '../../crypto/CryptoAEAD';
 // import { genId, now, uint8ArrayToBase64, uint8ArrayToHex } from '../Helpers.js';
 // import { generateRandomBytes } from '../CryptoUtils.js';
 
 export interface CollectionContent<T = unknown> {
   readonly type: CollectionType;
   readonly data$: ReactiveValue<T>;
-
-  /** Serialize for encryption/storage */
   serialize(): Uint8Array;
-
-  /** Apply remote changes (from sync) */
-  // applyPatch(patch: unknown): void;
-
-  /** Get pending changes for sync */
   getPendingChanges(): unknown | null;
-
-  /** Clear pending after successful sync */
   clearPending(): void;
 }
 
@@ -48,11 +41,16 @@ export type Collection = {
 
 // export const collectionFactory = (name: string, type: CollectionType): boolean => {};
 
-export class CollectionController {
+export class CollectionController<T extends CollectionContent = CollectionContent> {
   #collection: Collection | CollectionMinimal;
-  #loaded: boolean = false;
-  constructor(collection: Collection) {
+  #content: T | null = null;
+  #encryptionKey: Promise<AEADCryptoKey>;
+  #s3KeyPath: string; // vaultId/collectionId
+
+  constructor(collection: Collection | CollectionMinimal, encryptionKey: RawAEADKey, vaultId: VaultId) {
     this.#collection = collection;
+    this.#encryptionKey = AEAD.importAEADKey(encryptionKey);
+    this.#s3KeyPath = `${vaultId}/${collection.collectionId}`;
   }
 
   get collection(): Collection | CollectionMinimal {
@@ -60,6 +58,69 @@ export class CollectionController {
   }
 
   get loaded(): boolean {
-    return this.#loaded;
+    return this.#content !== null;
+  }
+
+  get content(): T {
+    if (!this.#content) throw new Error('Collection not loaded');
+    return this.#content;
+  }
+
+  get s3Key(): string {
+    return this.#s3KeyPath;
+  }
+
+  get encryptionKey(): Promise<AEADCryptoKey> {
+    return this.#encryptionKey;
+  }
+
+  /** Load and decrypt collection from S3 */
+  // async load(encryptedBytes: Uint8Array): Promise<void> {
+  //   const decrypted = await AEAD.decrypt(this.#encryptionKey, encryptedBytes);
+
+  //   switch (this.#collection.collectionType) {
+  //     case 'KV':
+  //       this.#content = KVContent.deserialize(decrypted) as T;
+  //       break;
+  //     // case 'VFS':
+  //     //   this.#content = VFSContent.deserialize(decrypted) as T;
+  //     //   break;
+  //     default:
+  //       throw new Error(`Unsupported collection type: ${this.#collection.collectionType}`);
+  //   }
+  // }
+
+  /** Create new empty collection */
+  // create(): void {
+  //   switch (this.#collection.collectionType) {
+  //     case 'KV':
+  //       this.#content = new KVContent() as T;
+  //       break;
+  //     default:
+  //       throw new Error(`Unsupported collection type: ${this.#collection.collectionType}`);
+  //   }
+  // }
+
+  /** Serialize and encrypt for S3 upload */
+  // async save(): Promise<Uint8Array> {
+  //   if (!this.#content) throw new Error('No content to save');
+  //   const serialized = this.#content.serialize();
+  //   return await AEAD.encrypt(this.#encryptionKey, serialized);
+  // }
+
+  /** Check if there are unsaved changes */
+  hasPending(): boolean {
+    return this.#content?.getPendingChanges() !== null;
+  }
+
+  /** Clear pending changes after successful save */
+  clearPending(): void {
+    this.#content?.clearPending();
+  }
+
+  updateEtag(etag: string): void {
+    if ('collectionEtag' in this.#collection) {
+      this.#collection.collectionEtag = etag;
+    }
   }
 }

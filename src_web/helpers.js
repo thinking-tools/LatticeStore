@@ -1,5 +1,5 @@
-const CHUNK_SIZE = 8 * 1024 * 1024;
-
+// import { CHUNK_SIZE } from '../shared/Consts.js';
+const CHUNK_SIZE = 8 * 1024 * 1024; // 1 MiB
 // --- static maps -----------------------------------------------------------
 const IOS_RESOLUTION_TO_MODEL = new Map([
   // width×height in *physical* pixels (portrait order) ➜ model(s)
