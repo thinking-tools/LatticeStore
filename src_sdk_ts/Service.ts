@@ -178,6 +178,9 @@ export class LatticeStoreService {
 
   public async deleteAll(): Promise<{ accounts: Record<string, any>[]; allS3File: string[] | null }> {
     await Admin.deleteAll(this.#s3, this.#vaultRedis);
+    await this.#chunks.clearCache();
+    await this.#tokens.revokeAllTokens();
+
     const data = (await Admin.listAccounts(this.#s3, this.#vaultRedis)) as {
       accounts: Record<string, any>[];
       allS3File: string[] | null;

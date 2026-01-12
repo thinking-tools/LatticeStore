@@ -83,6 +83,10 @@ export class Chunks {
     return { data, etag };
   }
 
+  async clearCache(): Promise<void> {
+    await this.#cache.clear();
+  }
+
   // TODO: implement chunk deletion if needed
   //   async deleteChunks(vaultId: string, prefix: string): Promise<number> {
   //     const keys = await this.#s3.listObjects({ prefix: `${vaultId}/${prefix}` });
