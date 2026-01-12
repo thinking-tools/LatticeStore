@@ -1,6 +1,6 @@
 import { fromUint8Array } from '../shared/Helpers';
 
-import type { Base64 } from '../shared/Consts';
+import type { Base64, MemberId } from '../shared/Consts';
 import type { Vault } from './Vault';
 
 // ===== TYPES =====
@@ -23,13 +23,13 @@ export type CheckResponse = {
 export type LoginRequest = {
   payload: LoginPayload;
   payloadHash: Base64<Uint8Array>;
-  signerId: string;
+  signerId: MemberId;
   signature: Base64<Uint8Array>;
 };
 
 export type LoginPayload = {
   accountName: string;
-  memberId: string;
+  memberId: MemberId;
   timestamp: number;
 };
 

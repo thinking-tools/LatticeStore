@@ -12,6 +12,7 @@ import type { KeyvStoreAdapter } from 'keyv';
 import type { RegisterResponse, LoginRequest, LoginResponse, CheckRequest, CheckResponse } from './client/ApiClient';
 import type { Vault } from './client/Vault';
 import type { UploadResult } from './server/Chunks';
+import type { MemberId, VaultId } from './shared/Consts.js';
 
 export class LatticeStoreService {
   readonly #s3: S3mini;
@@ -77,7 +78,15 @@ export class LatticeStoreService {
       if (!validated) {
         throw new Error('Invalid login');
       }
-      const token = await this.#tokens.generateTokenForMemberAndVault(body.payload.memberId, vaultManifest.payload.id);
+      const memberRole = this.#accounts.getMemberRole(body.payload.memberId, vaultManifest);
+      if (!memberRole) {
+        throw new Error('No permissions for this member');
+      }
+      const token = await this.#tokens.generateTokenForMemberAndVault(
+        body.payload.memberId,
+        vaultManifest.payload.id,
+        memberRole,
+      );
       return {
         ok: true,
         accountVault: vaultManifest,
@@ -99,8 +108,8 @@ export class LatticeStoreService {
     try {
       const authTokenBearer = headers.get('Authorization') || '';
       const providedAuthToken = authTokenBearer.split(' ')[1];
-      const memberId = headers.get('x-member-id');
-      const vaultId = headers.get('x-vault-id');
+      const memberId = headers.get('x-member-id') as MemberId;
+      const vaultId = headers.get('x-vault-id') as VaultId;
       if (!memberId || !vaultId || !providedAuthToken) {
         throw new Error('Missing authentication headers');
       }
@@ -132,8 +141,8 @@ export class LatticeStoreService {
   public async upload(headers: Headers, body: ArrayBuffer): Promise<UploadResult> {
     const t0 = Date.now();
     const authToken = headers.get('Authorization')?.split(' ')[1];
-    const memberId = headers.get('x-member-id');
-    const vaultId = headers.get('x-vault-id');
+    const memberId = headers.get('x-member-id') as MemberId;
+    const vaultId = headers.get('x-vault-id') as VaultId;
     const chunkKey = headers.get('x-chunk-key');
 
     if (!authToken || !memberId || !vaultId || !chunkKey) {

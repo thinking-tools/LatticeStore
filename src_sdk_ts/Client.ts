@@ -11,7 +11,7 @@ import { uint8ArrayToBase64, now, generateCanonicalJSON } from './shared/Helpers
 import { DEFAULT_SEED_LENGTH_BYTES, RECOVERY_DEVICE_NAME } from './shared/Consts';
 // import { VaultController } from './Vault';
 
-import type { VaultId, Base64, Base64Encrypted } from './shared/Consts.js';
+import type { VaultId, Base64, Base64Encrypted, VaultType } from './shared/Consts.js';
 import type { VaultRegistrationPayload, Vault } from './client/Vault';
 
 const _verifySecurityContext = async () => {
@@ -97,7 +97,7 @@ export class LatticeStoreClient {
       const registerPayload: VaultRegistrationPayload = {
         version: 1,
         name: accountName.trim(),
-        type: VAULT_TYPE.account,
+        type: VAULT_TYPE.account as VaultType,
         id: accountMember.memberId as unknown as VaultId,
         dsaPubkey: uint8ArrayToBase64(accountMember.dsaKeys.publicKey) as Base64<Uint8Array>,
         kemPubkey: uint8ArrayToBase64(accountMember.kemKeys.publicKey) as Base64<Uint8Array>,

@@ -140,7 +140,7 @@ const _isValidLoginPayload = (body: LoginRequest): boolean => {
   return true;
 };
 export const validateRegistrationRequest = async (body: Vault): Promise<boolean> => {
-  return isValidVaultManifest(body, VAULT_TYPE.account);
+  return isValidVaultManifest(body, VAULT_TYPE.account as VaultType);
 };
 
 export const validateLoginRequest = async (body: LoginRequest, vaultManifest: Vault): Promise<boolean> => {

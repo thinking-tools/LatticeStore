@@ -16,16 +16,18 @@ export type MemberId = Brand<string, 'MemberId'>;
 export type ChunkId = Brand<string, 'ChunkId'>;
 export type VaultId = Brand<string, 'VaultId'>;
 export type TaskId = Brand<string, 'TaskId'>;
-export type VaultType = 'account' | 'team';
+export type VaultType = 'a' | 't';
 
-export const VAULTS_NAMESPACE = 'VAULTS';
-export const CHUNKS_NAMESPACE = 'CHNKS';
-export const NAME_MAPPING = 'NAME2ID';
-export const RECOVERY_DEVICE_NAME = '__RECOVERY_DEVICE__';
+export const VAULTS_NAMESPACE = 'V';
+export const CHUNKS_NAMESPACE = 'C';
+export const TOKEN_NAMESPACE = 'T';
+export const NAME_MAPPING = 'N';
 
-export const VAULT_TYPE: Record<VaultType, VaultType> = Object.freeze({
-  account: 'account',
-  team: 'team',
+export const RECOVERY_DEVICE_NAME = '__RECOVERY__';
+
+export const VAULT_TYPE: Record<string, VaultType> = Object.freeze({
+  account: 'a',
+  team: 't',
 });
 
 export const MEMBER_STATUS: Record<MemberStatus, MemberStatus> = Object.freeze({
@@ -154,8 +156,6 @@ export const RESERVED_USERNAMES = [
 ];
 
 export const KV_KEY_SIZE_LIMIT_BYTES = 64;
-
-export const TOKEN_NAMESPACE = 'TKN';
 
 export const CHUNK_SIZE = 8 * 1024 * 1024; // 8 MB
 export const TIMESTAMP_TOLERANCE_MS = 1 * 60 * 1000; // 1 minute

@@ -1,6 +1,6 @@
 import { S3mini, sanitizeETag, runInBatches } from 's3mini';
 import { Keyv } from 'keyv';
-import { NAME_MAPPING, ETAG_TTL_SECONDS, VAULT_TYPE } from '../shared/Consts';
+import { NAME_MAPPING, ETAG_TTL_SECONDS, VAULT_TYPE, MEMBER_STATUS, PERMISSIONS, MemberRole } from '../shared/Consts';
 
 import type { Vault } from '../client/Vault';
 import { checkListItem } from '../client/ApiClient';
@@ -128,6 +128,14 @@ export class Accounts {
     }
 
     return changedIds;
+  }
+
+  public getMemberRole(memberId: string, vaultManifest: Vault): MemberRole | null {
+    const member = vaultManifest.payload.memberSlots.find(m => m.memberId === memberId);
+    if (!member || !member.memberRole || member.memberStatus !== MEMBER_STATUS.ACTIVE) {
+      return null;
+    }
+    return PERMISSIONS.hasOwnProperty(member.memberRole) ? (member.memberRole as MemberRole) : null;
   }
 
   // public async create(accountData: AccountData, envelopes: DeviceEnvelope[], deviceListFile: string): Promise<boolean> {

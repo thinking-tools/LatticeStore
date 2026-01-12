@@ -89,7 +89,10 @@ export class VaultController {
     }
     // validate vault payload and extract account info
     const vaultManifest = response.accountVault;
-    if (!isValidVaultManifest(vaultManifest, VAULT_TYPE.account) || vaultManifest.payload.name !== accountName) {
+    if (
+      !isValidVaultManifest(vaultManifest, VAULT_TYPE.account as VaultType) ||
+      vaultManifest.payload.name !== accountName
+    ) {
       throw new Error('Invalid vault manifest received from server');
     }
 
