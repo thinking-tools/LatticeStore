@@ -46,8 +46,14 @@ export class Chunks {
     if (!s3response.ok) {
       return { ok: false, status: s3response.status, message: 'S3 upload failed' };
     }
-
-    const etag = sanitizeETag(s3response.headers.get('etag') ?? '');
+    let rawEtag = s3response.headers.get('etag');
+    if (!rawEtag) {
+      rawEtag = await this.#s3.getEtag(s3Key);
+      if (!rawEtag) {
+        return { ok: false, status: 500, message: 'Failed to retrieve ETag after upload' };
+      }
+    }
+    const etag = sanitizeETag(rawEtag);
     // console.log('Storing etag in cache:', cacheKey, etag);
     await this.#cache.set(cacheKey, etag, CHUNK_TTL_SECONDS * 1000);
 

@@ -121,7 +121,7 @@ api.put('upload', async c => {
     return c.json({ ok: false, message: 'Service not initialized' }, 500);
   }
   const result = await ls.upload(headers, body);
-  return c.json(result);
+  return c.json({ ok: result.ok, message: result.message, etag: result.etag }, result.status);
   // const authTokenBearer = c.req.header('Authorization');
   // const providedAuthToken = authTokenBearer.split(' ')[1];
   // const userId = c.req.header('x-user-id');

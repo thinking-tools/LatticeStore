@@ -301,31 +301,8 @@ export class Tasker {
     this.#dispatch();
   }
 
-  async #sliceSource(source: DataSource, start: number, end: number): Promise<ArrayBuffer> {
-    if (source instanceof ArrayBuffer) {
-      return source.slice(start, end);
-    }
-    const slice = source.slice(start, end);
-    return slice.arrayBuffer();
-  }
-
   async #sendChunkBatch(task: TaskQItem, assignment: ChunkAssignment, workerId: WorkerId) {
     const freshToken = task.vaultRef.getAuthToken();
-    const startByte = assignment.startIndex * CHUNK_SIZE;
-    const endByte = Math.min((assignment.endIndex + 1) * CHUNK_SIZE, task.totalBytes);
-
-    let slice: ArrayBuffer;
-    try {
-      slice = await this.#sliceSource(task.source, startByte, endByte);
-    } catch (e) {
-      assignment.status = 'pending';
-      assignment.workerId = null;
-      assignment.startedAt = null;
-      this.#markIdle(workerId);
-      this.#failTask(task, `Failed to read source data: ${(e as Error).message}`);
-      return;
-    }
-
     if (task.aborted || task.paused) {
       assignment.status = 'pending';
       assignment.workerId = null;
@@ -336,25 +313,23 @@ export class Tasker {
 
     task.taskStatus = 'in-progress';
 
-    this.#workers.get(workerId)!.worker.postMessage(
-      {
-        action: 'uploadBatch',
-        taskId: task.taskId,
-        fileId: task.fileId,
-        memberId: task.memberId,
-        vaultId: task.vaultId,
-        authToken: freshToken,
-        s3KeyPrefix: task.s3KeyPrefix,
-        encKey: task.encKey,
-        startIndex: assignment.startIndex,
-        endIndex: assignment.endIndex,
-        chunkSize: CHUNK_SIZE,
-        expectedEtag: task.options.expectedEtag,
-        createOnly: task.options.createOnly,
-        data: slice,
-      },
-      [slice],
-    );
+    this.#workers.get(workerId)!.worker.postMessage({
+      action: 'uploadBatch',
+      taskId: task.taskId,
+      fileId: task.fileId,
+      memberId: task.memberId,
+      vaultId: task.vaultId,
+      authToken: freshToken,
+      s3KeyPrefix: task.s3KeyPrefix,
+      encKey: task.encKey,
+      startIndex: assignment.startIndex,
+      endIndex: assignment.endIndex,
+      chunkSize: CHUNK_SIZE,
+      expectedEtag: task.options.expectedEtag,
+      createOnly: task.options.createOnly,
+      source: task.source,
+      totalBytes: task.totalBytes,
+    });
   }
 
   #onWorkerMsg(workerId: WorkerId, { data }: MessageEvent) {

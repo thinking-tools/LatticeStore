@@ -7,6 +7,7 @@ import { AEAD, type RawAEADKey } from '../crypto/CryptoAEAD.js';
 
 declare const self: DedicatedWorkerGlobalScope;
 
+const CONCURRENT_UPLOADS = 5;
 let endpoint = '';
 
 type UploadBatchParams = {
@@ -20,9 +21,10 @@ type UploadBatchParams = {
   startIndex: number;
   endIndex: number;
   chunkSize: number;
-  data: ArrayBuffer;
+  source: File | Blob | ArrayBuffer;
   expectedEtag?: string;
   createOnly?: boolean;
+  totalBytes: number;
 };
 
 type WatchParams = {
@@ -31,6 +33,8 @@ type WatchParams = {
   authToken: string;
   files: Array<{ s3Key: string; etag: string | Function }>;
 };
+
+type ChunkResult = { chunkIndex: number; chunkKey: string; chunkEtag: string };
 
 self.onmessage = async e => {
   const { action, ...params } = e.data;
@@ -91,67 +95,97 @@ const handleUploadBatch = async (params: UploadBatchParams) => {
     startIndex,
     endIndex,
     chunkSize,
-    data,
+    source,
+    totalBytes,
     expectedEtag,
     createOnly,
   } = params;
-  console.log(`Worker upload batch for file ${fileId}: chunks ${startIndex} to ${endIndex} fileid ${fileId}`);
-  let aeadKey = await AEAD.importAEADKey(encKey);
-  let results: Array<{ chunkIndex: number; chunkKey: string; chunkEtag: string }> = [];
+
+  const aeadKey = await AEAD.importAEADKey(encKey);
+  const results: ChunkResult[] = [];
+  const inFlight = new Map<number, Promise<void>>();
   let lastCompletedIndex = startIndex - 1;
+  let failed = false;
+  let failError = '';
+  console.log(`Worker upload batch: ${fileId} [${startIndex}-${endIndex}]`);
+
+  const upload = async (i: number, encrypted: Uint8Array) => {
+    if (failed) return;
+
+    const chunkKey = `${s3KeyPrefix}_${i}`;
+    const headers: Record<string, string> = {
+      'x-member-id': memberId,
+      'x-vault-id': vaultId,
+      'x-chunk-key': chunkKey,
+      'Content-Type': 'application/octet-stream',
+    };
+
+    if (i === startIndex) {
+      if (createOnly) headers['If-None-Match'] = '*';
+      else if (expectedEtag) headers['If-Match'] = expectedEtag;
+    }
+
+    const response = await authRequest(`${endpoint}/upload`, 'PUT', authToken, encrypted, headers);
+
+    if (!response.ok) {
+      failed = true;
+      if (response.status === 401) {
+        self.postMessage({ type: 'auth-error', vaultId });
+        failError = 'Auth error';
+      } else if (response.status === 412) {
+        self.postMessage({
+          type: 'precondition-failed',
+          taskId,
+          message: createOnly ? 'File already exists' : 'Etag mismatch',
+        });
+        failError = 'Precondition failed';
+      } else {
+        failError = `Upload failed: ${response.status}`;
+      }
+      return;
+    }
+
+    const etag = (await response.json()).etag || '';
+    const result = { chunkIndex: i, chunkKey, chunkEtag: etag };
+    results.push(result);
+    lastCompletedIndex = Math.max(lastCompletedIndex, i);
+    self.postMessage({ type: 'chunk-progress', taskId, ...result });
+  };
 
   try {
-    for (let i = startIndex; i <= endIndex; i++) {
-      const localOffset = (i - startIndex) * chunkSize;
-      const localEnd = Math.min(localOffset + chunkSize, data.byteLength);
-      const chunkData = new Uint8Array(data.slice(localOffset, localEnd));
-
+    for (let i = startIndex; i <= endIndex && !failed; i++) {
+      // Sequential encryption (avoids WebCrypto contention)
+      const start = i * chunkSize;
+      const end = Math.min(start + chunkSize, totalBytes);
+      const blob = source instanceof ArrayBuffer ? new Blob([source.slice(start, end)]) : source.slice(start, end);
+      const chunkData = new Uint8Array(await blob.arrayBuffer());
       const encrypted = await AEAD.encrypt(aeadKey, chunkData);
 
-      const chunkKey = `${s3KeyPrefix}_${i}`;
-      const url = `${endpoint}/upload`;
-      const headers: Record<string, string> = {
-        'x-member-id': memberId,
-        'x-vault-id': vaultId,
-        'x-chunk-key': chunkKey,
-        'Content-Type': 'application/octet-stream',
-      };
-
-      if (i === startIndex) {
-        if (createOnly) {
-          headers['If-None-Match'] = '*';
-        } else if (expectedEtag) {
-          headers['If-Match'] = expectedEtag;
-        }
+      // Throttle: wait if too many in flight
+      while (inFlight.size >= CONCURRENT_UPLOADS) {
+        await Promise.race(inFlight.values());
       }
 
-      const response = await authRequest(url, 'PUT', authToken, encrypted, headers);
+      if (failed) break;
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          self.postMessage({ type: 'auth-error', vaultId });
-          throw new Error('Auth error');
-        }
+      // Fire upload, don't await
+      const p = upload(i, encrypted).finally(() => inFlight.delete(i));
+      inFlight.set(i, p);
+    }
 
-        if (response.status === 412) {
-          self.postMessage({
-            type: 'precondition-failed',
-            taskId,
-            message: createOnly ? 'File already exists' : 'File was modified (etag mismatch)',
-          });
-          return;
-        }
+    // Drain remaining
+    await Promise.all(inFlight.values());
 
-        throw new Error(`Upload failed: ${response.status}`);
-      }
-
-      const etag = (await response.json()).etag || '';
-
-      const result = { chunkIndex: i, chunkKey, chunkEtag: etag };
-      results.push(result);
-      lastCompletedIndex = i;
-
-      self.postMessage({ type: 'chunk-progress', taskId, ...result });
+    if (failed) {
+      self.postMessage({
+        type: 'batch-error',
+        taskId,
+        startIndex,
+        endIndex,
+        lastCompletedIndex,
+        error: failError,
+      });
+      return;
     }
 
     self.postMessage({
@@ -159,7 +193,7 @@ const handleUploadBatch = async (params: UploadBatchParams) => {
       taskId,
       startIndex,
       endIndex,
-      results,
+      results: results.sort((a, b) => a.chunkIndex - b.chunkIndex),
     });
   } catch (error) {
     self.postMessage({

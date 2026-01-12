@@ -130,6 +130,7 @@ export class LatticeStoreService {
   }
 
   public async upload(headers: Headers, body: ArrayBuffer): Promise<UploadResult> {
+    const t0 = Date.now();
     const authToken = headers.get('Authorization')?.split(' ')[1];
     const memberId = headers.get('x-member-id');
     const vaultId = headers.get('x-vault-id');
@@ -139,18 +140,22 @@ export class LatticeStoreService {
       return { ok: false, status: 400, message: 'Missing required headers' };
     }
 
-    const valid = await this.#tokens.isValidToken(memberId, vaultId, authToken);
+    let valid = await this.#tokens.isValidToken(memberId, vaultId, authToken);
     if (!valid) {
       return { ok: false, status: 401, message: 'Invalid token' };
     }
-
-    return this.#chunks.upload(
+    const t1 = Date.now();
+    let resp = this.#chunks.upload(
       vaultId,
       chunkKey,
       body,
       headers.get('If-Match') ?? undefined,
       headers.get('If-None-Match') ?? undefined,
     );
+    const t2 = Date.now();
+    console.log(`Body/auth: ${t1 - t0}ms | Upload: ${t2 - t1}ms | Total: ${t2 - t0}ms`);
+
+    return resp;
   }
 
   // // ONLY FOR DEVELOPMENT AND TESTING PURPOSES

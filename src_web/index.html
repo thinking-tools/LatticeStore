@@ -97,15 +97,17 @@
           console.log('Login response:', account);
           if (account) {
             // lets test upload
-            const testData = new TextEncoder().encode('Hello Lattice!');
+            const testData = new Blob([new ArrayBuffer(1024 * 1024 * 40)], { type: 'application/octet-stream' });
             const encKey = crypto.getRandomValues(new Uint8Array(32));
-            const handle = account.upload('test-file-001', testData.buffer, encKey, {
+            console.time('test1');
+            const handle = account.upload('test-file-newname', testData, encKey, {
               createOnly: true,
               onProgress: p => console.log('progress:', p.bytesUploaded, '/', p.totalBytes),
             });
             console.log('Upload handle:', handle.taskId);
             const result = await handle.promise;
             console.log('Upload result:', result);
+            console.timeEnd('test1');
           }
         },
         async logout() {
