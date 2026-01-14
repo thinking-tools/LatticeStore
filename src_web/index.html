@@ -94,20 +94,35 @@
         async login(username, password) {
           console.log('Logging in user:', username);
           const account = await lattice.login(username, new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 0]));
+          const filename = 'hello2.txt';
           console.log('Login response:', account);
           if (account) {
-            // lets test upload
-            const testData = new Blob([new ArrayBuffer(1024 * 1024 * 40)], { type: 'application/octet-stream' });
-            const encKey = crypto.getRandomValues(new Uint8Array(32));
-            console.time('test1');
-            const handle = account.upload('test-file-newname', testData, encKey, {
-              createOnly: true,
-              onProgress: p => console.log('progress:', p.bytesUploaded, '/', p.totalBytes),
+            const listCollections = await account.listCollections();
+            console.log('User collections:', listCollections);
+            const encKey = new Uint8Array([
+              1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2,
+            ]);
+            const encoded_msg = new TextEncoder().encode('Hello, Lattice! This is a test file.');
+            // genearate simple upload
+            const uploadResult = await account.upload(filename, encoded_msg.buffer, encKey, {
+              contentType: 'text/plain',
+              onProgress: progress => {
+                console.log('Upload progress:', progress);
+              },
             });
-            console.log('Upload handle:', handle.taskId);
-            const result = await handle.promise;
-            console.log('Upload result:', result);
-            console.timeEnd('test1');
+            const uploadResultData = await uploadResult.promise;
+            console.log('Upload result:', uploadResultData);
+            // decode
+            const decoded_msg = new TextDecoder().decode(encoded_msg);
+            console.log('Decoded message:', decoded_msg);
+            const downloadResult = await account.download(filename, encKey, {
+              onProgress: progress => {
+                console.log('Download progress:', progress);
+              },
+            });
+            console.log('Downloaded :', downloadResult);
+            const downloadData = await downloadResult.promise;
+            const downloadedText = new TextDecoder().decode(downloadData.data);
           }
         },
         async logout() {

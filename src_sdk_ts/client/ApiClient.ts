@@ -1,5 +1,3 @@
-import { fromUint8Array } from '../shared/Helpers';
-
 import type { Base64, MemberId } from '../shared/Consts';
 import type { Vault } from './Vault';
 
@@ -122,6 +120,10 @@ export class ResponseParser {
     return this.response.text();
   }
 
+  async arrayBuffer(): Promise<ArrayBuffer> {
+    return this.response.arrayBuffer();
+  }
+
   /**
    * Parse response as blob
    */
@@ -207,10 +209,11 @@ const prepareBearerAuth = (token: string, headers: Record<string, string>): { he
 const serializeBody = (
   body: any,
   headers: Record<string, string>,
-): { body: string; headers: Record<string, string> } => {
-  if (body instanceof Uint8Array) {
+): { body: BodyInit; headers: Record<string, string> } => {
+  // Binary data - pass through directly
+  if (body?.byteLength !== undefined && !('size' in body)) {
     return {
-      body: fromUint8Array(body),
+      body,
       headers: {
         ...headers,
         'Content-Type': headers['Content-Type'] || 'application/octet-stream',
@@ -260,7 +263,7 @@ const _fetchRequest = async (url: string, options: RequestOptions = {}): Promise
   const { method = 'GET', body, headers: customHeaders = {}, auth } = options;
 
   let headers = { ...customHeaders };
-  let requestBody: string | undefined;
+  let requestBody: BodyInit | undefined;
   // let requestId: string = '';
 
   // // Handle authentication
@@ -361,41 +364,41 @@ export const authRequest = async (
 /**
  * Simple GET request with auth token (returns JSON)
  */
-export const get = async <T = any>(url: string, authToken: string, headers?: Record<string, string>): Promise<T> => {
-  const parser = await authRequest(url, 'GET', authToken, undefined, headers);
-  return parser.json<T>();
-};
+// const get = async <T = any>(url: string, authToken: string, headers?: Record<string, string>): Promise<T> => {
+//   const parser = await authRequest(url, 'GET', authToken, undefined, headers);
+//   return parser.json<T>();
+// };
 
-/**
- * Simple POST request with auth token (returns JSON)
- */
-export const post = async <T = any>(
-  url: string,
-  authToken: string,
-  body?: any,
-  headers?: Record<string, string>,
-): Promise<T> => {
-  const parser = await authRequest(url, 'POST', authToken, body, headers);
-  return parser.json<T>();
-};
+// /**
+//  * Simple POST request with auth token (returns JSON)
+//  */
+// const post = async <T = any>(
+//   url: string,
+//   authToken: string,
+//   body?: any,
+//   headers?: Record<string, string>,
+// ): Promise<T> => {
+//   const parser = await authRequest(url, 'POST', authToken, body, headers);
+//   return parser.json<T>();
+// };
 
-/**
- * Simple PUT request with auth token (returns JSON)
- */
-export const put = async <T = any>(
-  url: string,
-  authToken: string,
-  body?: any,
-  headers?: Record<string, string>,
-): Promise<T> => {
-  const parser = await authRequest(url, 'PUT', authToken, body, headers);
-  return parser.json<T>();
-};
+// /**
+//  * Simple PUT request with auth token (returns JSON)
+//  */
+// const put = async <T = any>(
+//   url: string,
+//   authToken: string,
+//   body?: any,
+//   headers?: Record<string, string>,
+// ): Promise<T> => {
+//   const parser = await authRequest(url, 'PUT', authToken, body, headers);
+//   return parser.json<T>();
+// };
 
-/**
- * Simple DELETE request with auth token (returns JSON)
- */
-export const del = async <T = any>(url: string, authToken: string, headers?: Record<string, string>): Promise<T> => {
-  const parser = await authRequest(url, 'DELETE', authToken, undefined, headers);
-  return parser.json<T>();
-};
+// /**
+//  * Simple DELETE request with auth token (returns JSON)
+//  */
+// const del = async <T = any>(url: string, authToken: string, headers?: Record<string, string>): Promise<T> => {
+//   const parser = await authRequest(url, 'DELETE', authToken, undefined, headers);
+//   return parser.json<T>();
+// };

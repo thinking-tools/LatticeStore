@@ -16,15 +16,24 @@ type UploadBatchParams = {
   memberId: string;
   vaultId: string;
   authToken: string;
-  s3KeyPrefix: string;
   encKey: RawAEADKey;
   startIndex: number;
   endIndex: number;
+  totalChunks: number;
   chunkSize: number;
   source: File | Blob | ArrayBuffer;
   expectedEtag?: string;
   createOnly?: boolean;
   totalBytes: number;
+};
+
+type DownloadParams = {
+  taskId: string;
+  fileId: string;
+  memberId: string;
+  vaultId: string;
+  authToken: string;
+  encKey: RawAEADKey;
 };
 
 type WatchParams = {
@@ -52,6 +61,10 @@ self.onmessage = async e => {
 
       case 'uploadBatch':
         await handleUploadBatch(params as UploadBatchParams);
+        break;
+
+      case 'download':
+        await handleDownload(params as DownloadParams);
         break;
     }
   } catch (error) {
@@ -83,6 +96,46 @@ const handleWatch = async (params: WatchParams) => {
   self.postMessage({ type: 'watch', vaultId, changed: result.changed });
 };
 
+const handleDownload = async (params: DownloadParams) => {
+  const { taskId, fileId, memberId, vaultId, authToken, encKey } = params;
+
+  try {
+    const aeadKey = await AEAD.importAEADKey(encKey);
+    encKey.fill(0);
+
+    const headers: Record<string, string> = {
+      'x-member-id': memberId,
+      'x-vault-id': vaultId,
+      'x-chunk-key': fileId,
+    };
+
+    const response = await authRequest(`${endpoint}/download`, 'GET', authToken, undefined, headers);
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        self.postMessage({ type: 'auth-error', vaultId });
+        return;
+      }
+      throw new Error(`Download failed: ${response.status}`);
+    }
+    const buffer = await response.arrayBuffer();
+    const etag = response.headers.get('etag') || '';
+    const encrypted = new Uint8Array(buffer);
+    const decrypted = await AEAD.decrypt(aeadKey, encrypted);
+
+    self.postMessage(
+      { type: 'download-complete', taskId, etag, data: decrypted.buffer },
+      [decrypted.buffer], // transfer
+    );
+  } catch (error) {
+    self.postMessage({
+      type: 'download-error',
+      taskId,
+      error: (error as Error).message,
+    });
+  }
+};
+
 const handleUploadBatch = async (params: UploadBatchParams) => {
   const {
     taskId,
@@ -90,10 +143,10 @@ const handleUploadBatch = async (params: UploadBatchParams) => {
     memberId,
     vaultId,
     authToken,
-    s3KeyPrefix,
     encKey,
     startIndex,
     endIndex,
+    totalChunks,
     chunkSize,
     source,
     totalBytes,
@@ -102,17 +155,19 @@ const handleUploadBatch = async (params: UploadBatchParams) => {
   } = params;
 
   const aeadKey = await AEAD.importAEADKey(encKey);
-  const results: ChunkResult[] = [];
+  encKey.fill(0);
+  const results = new Map<number, ChunkResult>();
   const inFlight = new Map<number, Promise<void>>();
-  let lastCompletedIndex = startIndex - 1;
+  let lastContiguous = startIndex - 1;
   let failed = false;
   let failError = '';
-  console.log(`Worker upload batch: ${fileId} [${startIndex}-${endIndex}]`);
+
+  const getChunkKey = (i: number) => (totalChunks === 1 ? fileId : `${fileId}_${i}`);
 
   const upload = async (i: number, encrypted: Uint8Array) => {
     if (failed) return;
 
-    const chunkKey = `${s3KeyPrefix}_${i}`;
+    const chunkKey = getChunkKey(i);
     const headers: Record<string, string> = {
       'x-member-id': memberId,
       'x-vault-id': vaultId,
@@ -146,35 +201,33 @@ const handleUploadBatch = async (params: UploadBatchParams) => {
     }
 
     const etag = (await response.json()).etag || '';
-    const result = { chunkIndex: i, chunkKey, chunkEtag: etag };
-    results.push(result);
-    lastCompletedIndex = Math.max(lastCompletedIndex, i);
+    const result: ChunkResult = { chunkIndex: i, chunkKey, chunkEtag: etag };
+    results.set(i, result);
+    while (results.has(lastContiguous + 1)) lastContiguous++;
     self.postMessage({ type: 'chunk-progress', taskId, ...result });
   };
 
   try {
     for (let i = startIndex; i <= endIndex && !failed; i++) {
-      // Sequential encryption (avoids WebCrypto contention)
       const start = i * chunkSize;
       const end = Math.min(start + chunkSize, totalBytes);
       const blob = source instanceof ArrayBuffer ? new Blob([source.slice(start, end)]) : source.slice(start, end);
       const chunkData = new Uint8Array(await blob.arrayBuffer());
       const encrypted = await AEAD.encrypt(aeadKey, chunkData);
 
-      // Throttle: wait if too many in flight
       while (inFlight.size >= CONCURRENT_UPLOADS) {
         await Promise.race(inFlight.values());
       }
 
       if (failed) break;
 
-      // Fire upload, don't await
       const p = upload(i, encrypted).finally(() => inFlight.delete(i));
       inFlight.set(i, p);
     }
 
-    // Drain remaining
     await Promise.all(inFlight.values());
+
+    const sortedResults = [...results.values()].sort((a, b) => a.chunkIndex - b.chunkIndex);
 
     if (failed) {
       self.postMessage({
@@ -182,27 +235,28 @@ const handleUploadBatch = async (params: UploadBatchParams) => {
         taskId,
         startIndex,
         endIndex,
-        lastCompletedIndex,
+        lastCompletedIndex: lastContiguous,
         error: failError,
       });
-      return;
+    } else {
+      self.postMessage({
+        type: 'batch-complete',
+        taskId,
+        startIndex,
+        endIndex,
+        results: sortedResults,
+      });
     }
-
-    self.postMessage({
-      type: 'batch-complete',
-      taskId,
-      startIndex,
-      endIndex,
-      results: results.sort((a, b) => a.chunkIndex - b.chunkIndex),
-    });
   } catch (error) {
     self.postMessage({
       type: 'batch-error',
       taskId,
       startIndex,
       endIndex,
-      lastCompletedIndex,
+      lastCompletedIndex: lastContiguous,
       error: (error as Error).message,
     });
   }
+  results.clear();
+  inFlight.clear();
 };

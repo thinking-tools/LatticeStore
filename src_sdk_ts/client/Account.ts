@@ -1,11 +1,12 @@
 import type { DataSource, UploadOptions } from './Tasker';
-import type { MemberRole, MemberStatus, FileId } from '../shared/Consts'; // CollectionType
+import type { MemberRole, FileId, MemberStatus } from '../shared/Consts'; // CollectionType
 import type { RawAEADKey } from '../crypto/CryptoAEAD';
 
 import { VaultController } from './Vault';
 import { buildMember } from './Members';
 import { createNetworkMonitor } from './NetworkUtils';
 import { Tasker } from './Tasker';
+import { CollectionController } from './collections/Collection';
 
 // import { Feature } from './features/Features';
 // import type { FeatureType } from './features/Features';
@@ -84,8 +85,20 @@ export class Account extends EventTarget {
     return this.#accountVault.isManagerMember();
   }
 
+  public listCollections(): CollectionController[] {
+    return this.#accountVault.listCollections();
+  }
+
+  public getCollection(collectionId: string): CollectionController | null {
+    return this.#accountVault.getCollectionById(collectionId);
+  }
+
   public upload(fileId: FileId, data: DataSource, encKey: RawAEADKey, options?: UploadOptions) {
     return this.#tasker.upload(this.#accountVault, fileId, data, encKey, options);
+  }
+
+  public download(fileId: FileId, encKey: RawAEADKey) {
+    return this.#tasker.download(this.#accountVault, fileId, encKey);
   }
 
   // public async addCollection(collectionName: string, collectionType: CollectionType): Promise<void> {

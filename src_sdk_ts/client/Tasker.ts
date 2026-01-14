@@ -14,9 +14,13 @@ const STALL_TIMEOUT = 30_000;
 type WorkerId = string;
 type TaskerStatus = 'idle' | 'working' | 'paused:user' | 'paused:network';
 type TaskStatus = 'pending' | 'paused' | 'in-progress' | 'completed' | 'failed';
+// type TaskOp = 'upload' | 'download';
+
 export type DataSource = ArrayBuffer | File | Blob;
 
-export type TaskSummary = {
+type TaskQItem = TaskQUploadItem | TaskQDownloadItem;
+
+type TaskSummary = {
   taskId: TaskId;
   fileId: FileId;
   status: TaskStatus;
@@ -28,6 +32,7 @@ export type TaskSummary = {
 };
 
 type ChunkResult = { chunkIndex: number; chunkKey: string; chunkEtag: string };
+// type ChunkRef = { key: string; etag: string };
 
 type ChunkAssignment = {
   workerId: WorkerId | null;
@@ -44,6 +49,9 @@ export type UploadOptions = {
   /** If true, sends If-None-Match: * — fails if object exists */
   createOnly?: boolean;
   onProgress?: ((progress: UploadProgress) => void) | undefined;
+};
+export type DownloadOptions = {
+  onProgress?: (progress: DownloadProgress) => void;
 };
 
 export type UploadProgress = {
@@ -72,14 +80,29 @@ export type TaskQHandle<T> = {
   isPaused: () => boolean;
 };
 
-type TaskQItem = {
+export type DownloadProgress = {
+  taskId: TaskId;
+  fileId: FileId;
+  chunkIndex: number;
+  totalChunks: number;
+  etag: string;
+  data: ArrayBuffer;
+};
+
+export type DownloadResult = {
+  taskId: TaskId;
+  fileId: FileId;
+  etag: string;
+  data: ArrayBuffer;
+};
+
+type TaskQUploadItem = {
   taskStatus: TaskStatus;
+  taskOp: 'upload';
   taskId: TaskId;
   memberId: MemberId;
   vaultId: VaultId;
   fileId: FileId;
-  s3KeyPrefix: string;
-  authToken: string | null;
   encKey: RawAEADKey;
   vaultRef: VaultController;
   source: DataSource;
@@ -92,6 +115,24 @@ type TaskQItem = {
   reject: (error: Error) => void;
   aborted: boolean;
   paused: boolean;
+};
+type TaskQDownloadItem = {
+  taskStatus: TaskStatus;
+  taskOp: 'download';
+  taskId: TaskId;
+  memberId: MemberId;
+  vaultId: VaultId;
+  fileId: FileId;
+  encKey: RawAEADKey;
+  vaultRef: VaultController;
+  options: DownloadOptions;
+  resolve: (result: DownloadResult) => void;
+  reject: (error: Error) => void;
+  aborted: boolean;
+  paused: boolean;
+  workerId: WorkerId | null; // track assigned worker
+  startedAt: number | null; // for stall detection
+  retries: number; // retry count
 };
 
 type WatchQItem = {
@@ -148,18 +189,20 @@ export class Tasker {
   #updateTasksSummary() {
     const summaries: TaskSummary[] = [];
     for (const task of this.#taskQ.values()) {
-      const completedChunks = task.results.size;
-      const bytesUploaded = Math.min(completedChunks * CHUNK_SIZE, task.totalBytes);
-      summaries.push({
-        taskId: task.taskId,
-        fileId: task.fileId,
-        status: task.taskStatus,
-        totalBytes: task.totalBytes,
-        bytesUploaded,
-        totalChunks: task.totalChunks,
-        completedChunks,
-        progress: task.totalBytes > 0 ? bytesUploaded / task.totalBytes : 1,
-      });
+      if (task.taskOp === 'upload') {
+        const completedChunks = task.results.size;
+        const bytesUploaded = Math.min(completedChunks * CHUNK_SIZE, task.totalBytes);
+        summaries.push({
+          taskId: task.taskId,
+          fileId: task.fileId,
+          status: task.taskStatus,
+          totalBytes: task.totalBytes,
+          bytesUploaded,
+          totalChunks: task.totalChunks,
+          completedChunks,
+          progress: task.totalBytes > 0 ? bytesUploaded / task.totalBytes : 1,
+        });
+      }
     }
     this.tasks.set(summaries);
   }
@@ -232,26 +275,43 @@ export class Tasker {
     const now = Date.now();
     for (const task of this.#taskQ.values()) {
       if (task.aborted || task.paused) continue;
-
-      for (const assignment of task.assignments) {
-        if (assignment.status === 'in-progress' && assignment.startedAt && now - assignment.startedAt > STALL_TIMEOUT) {
-          console.warn(
-            `Stalled assignment detected: task=${task.taskId}, chunk=${assignment.startIndex}-${assignment.endIndex}`,
-          );
-
-          if (assignment.workerId) {
-            this.#markIdle(assignment.workerId);
+      switch (task.taskOp) {
+        case 'upload':
+          for (const assignment of task.assignments) {
+            if (
+              assignment.status === 'in-progress' &&
+              assignment.startedAt &&
+              now - assignment.startedAt > STALL_TIMEOUT
+            ) {
+              console.warn(
+                `Stalled upload: task=${task.taskId}, chunk=${assignment.startIndex}-${assignment.endIndex}`,
+              );
+              if (assignment.workerId) this.#markIdle(assignment.workerId);
+              assignment.retries++;
+              if (assignment.retries >= MAX_RETRIES) {
+                this.#failTask(task, `Upload stalled after ${MAX_RETRIES} retries`);
+              } else {
+                assignment.status = 'pending';
+                assignment.workerId = null;
+                assignment.startedAt = null;
+              }
+            }
           }
-
-          assignment.retries++;
-          if (assignment.retries >= MAX_RETRIES) {
-            this.#failTask(task, `Upload stalled after ${MAX_RETRIES} retries`);
-          } else {
-            assignment.status = 'pending';
-            assignment.workerId = null;
-            assignment.startedAt = null;
+          break;
+        case 'download':
+          if (task.startedAt && now - task.startedAt > STALL_TIMEOUT) {
+            console.warn(`Stalled download: task=${task.taskId}`);
+            if (task.workerId) this.#markIdle(task.workerId);
+            task.retries++;
+            if (task.retries >= MAX_RETRIES) {
+              this.#failTask(task, `Download stalled after ${MAX_RETRIES} retries`);
+            } else {
+              task.workerId = null;
+              task.startedAt = null;
+              task.taskStatus = 'pending';
+            }
           }
-        }
+          break;
       }
     }
   }
@@ -263,20 +323,50 @@ export class Tasker {
       if (task.aborted || task.paused) continue;
       if (task.taskStatus !== 'pending' && task.taskStatus !== 'in-progress') continue;
 
-      for (const assignment of task.assignments) {
-        if (assignment.status !== 'pending') continue;
+      if (task.taskOp === 'upload') {
+        for (const assignment of task.assignments) {
+          if (assignment.status !== 'pending') continue;
+          const workerId = this.#getIdleWorker();
+          if (!workerId) return;
+
+          assignment.status = 'in-progress';
+          assignment.workerId = workerId;
+          assignment.startedAt = Date.now();
+          this.#markBusy(workerId, task.taskId);
+          this.#sendChunkBatch(task, assignment, workerId);
+        }
+      } else if (task.taskOp === 'download') {
+        if (task.workerId) continue; // already assigned
         const workerId = this.#getIdleWorker();
         if (!workerId) return;
 
-        // Mark busy immediately to prevent race
-        assignment.status = 'in-progress';
-        assignment.workerId = workerId;
-        assignment.startedAt = Date.now();
+        task.workerId = workerId;
+        task.startedAt = Date.now();
+        task.taskStatus = 'in-progress';
         this.#markBusy(workerId, task.taskId);
-
-        this.#sendChunkBatch(task, assignment, workerId);
+        this.#sendDownload(task, workerId);
       }
     }
+  }
+
+  #sendDownload(task: TaskQDownloadItem, workerId: WorkerId) {
+    const freshToken = task.vaultRef.getAuthToken();
+    if (task.aborted || task.paused) {
+      task.workerId = null;
+      task.startedAt = null;
+      this.#markIdle(workerId);
+      return;
+    }
+
+    this.#workers.get(workerId)!.worker.postMessage({
+      action: 'download',
+      taskId: task.taskId,
+      fileId: task.fileId,
+      memberId: task.memberId,
+      vaultId: task.vaultId,
+      authToken: freshToken,
+      encKey: task.encKey,
+    });
   }
 
   #getIdleWorker(): WorkerId | null {
@@ -312,24 +402,25 @@ export class Tasker {
     }
 
     task.taskStatus = 'in-progress';
-
-    this.#workers.get(workerId)!.worker.postMessage({
-      action: 'uploadBatch',
-      taskId: task.taskId,
-      fileId: task.fileId,
-      memberId: task.memberId,
-      vaultId: task.vaultId,
-      authToken: freshToken,
-      s3KeyPrefix: task.s3KeyPrefix,
-      encKey: task.encKey,
-      startIndex: assignment.startIndex,
-      endIndex: assignment.endIndex,
-      chunkSize: CHUNK_SIZE,
-      expectedEtag: task.options.expectedEtag,
-      createOnly: task.options.createOnly,
-      source: task.source,
-      totalBytes: task.totalBytes,
-    });
+    if (task.taskOp === 'upload') {
+      this.#workers.get(workerId)!.worker.postMessage({
+        action: 'uploadBatch',
+        taskId: task.taskId,
+        fileId: task.fileId,
+        memberId: task.memberId,
+        vaultId: task.vaultId,
+        authToken: freshToken,
+        encKey: task.encKey,
+        startIndex: assignment.startIndex,
+        endIndex: assignment.endIndex,
+        totalChunks: task.totalChunks,
+        chunkSize: CHUNK_SIZE,
+        expectedEtag: task.options.expectedEtag,
+        createOnly: task.options.createOnly,
+        source: task.source,
+        totalBytes: task.totalBytes,
+      });
+    }
   }
 
   #onWorkerMsg(workerId: WorkerId, { data }: MessageEvent) {
@@ -360,6 +451,14 @@ export class Tasker {
         if (payload.changed?.length) this.#watchQ.get(vaultId)?.cb(true);
         break;
 
+      case 'download-complete':
+        this.#onDownloadComplete(workerId, taskId, payload);
+        break;
+
+      case 'download-error':
+        this.#onDownloadError(workerId, taskId, payload);
+        break;
+
       case 'auth-error':
         this.#onAuthError(vaultId);
         break;
@@ -368,19 +467,19 @@ export class Tasker {
 
   #onChunkProgress(taskId: TaskId, { chunkIndex, chunkKey, chunkEtag }: ChunkResult) {
     const task = this.#taskQ.get(taskId);
-    if (!task || task.aborted) return;
-
+    if (!task || task.aborted || task.taskOp !== 'upload') return;
     task.results.set(chunkIndex, { chunkIndex, chunkKey, chunkEtag });
     const completedCount = task.results.size;
-
-    task.options.onProgress?.({
-      taskId,
-      fileId: task.fileId,
-      chunkIndex,
-      totalChunks: task.totalChunks,
-      bytesUploaded: Math.min(completedCount * CHUNK_SIZE, task.totalBytes),
-      totalBytes: task.totalBytes,
-    });
+    if (task.taskOp === 'upload') {
+      task.options.onProgress?.({
+        taskId,
+        fileId: task.fileId,
+        chunkIndex,
+        totalChunks: task.totalChunks,
+        bytesUploaded: Math.min(completedCount * CHUNK_SIZE, task.totalBytes),
+        totalBytes: task.totalBytes,
+      });
+    }
     this.#updateTasksSummary();
   }
 
@@ -391,7 +490,7 @@ export class Tasker {
   ) {
     const task = this.#taskQ.get(taskId);
     this.#markIdle(workerId);
-    if (!task) return;
+    if (!task || task.taskOp !== 'upload') return;
 
     const assignment = task.assignments.find(
       a => a.startIndex === payload.startIndex && a.endIndex === payload.endIndex,
@@ -422,7 +521,7 @@ export class Tasker {
   ) {
     const task = this.#taskQ.get(taskId);
     this.#markIdle(workerId);
-    if (!task) return;
+    if (!task || task.taskOp !== 'upload') return;
 
     const assignment = task.assignments.find(
       a => a.startIndex === payload.startIndex && a.endIndex === payload.endIndex,
@@ -482,16 +581,70 @@ export class Tasker {
     worker.postMessage({ action: 'init', endpoint: this.#endpoint, workerId: newId });
     this.#workers.set(newId, { worker, busy: false, currentTaskId: null });
 
-    // Re-queue failed assignment
+    // Re-queue failed task
     if (taskId) {
       const task = this.#taskQ.get(taskId);
-      const assignment = task?.assignments.find(a => a.workerId === workerId && a.status === 'in-progress');
-      if (assignment) {
-        assignment.status = 'pending';
-        assignment.retries++;
+      if (!task) return;
+
+      if (task.taskOp === 'upload') {
+        const assignment = task.assignments.find(a => a.workerId === workerId && a.status === 'in-progress');
+        if (assignment) {
+          assignment.status = 'pending';
+          assignment.workerId = null;
+          assignment.startedAt = null;
+          assignment.retries++;
+          if (assignment.retries >= MAX_RETRIES) {
+            this.#failTask(task, `Upload failed after ${MAX_RETRIES} worker errors`);
+          }
+        }
+      } else if (task.taskOp === 'download') {
+        if (task.workerId === workerId) {
+          task.workerId = null;
+          task.startedAt = null;
+          task.retries++;
+          if (task.retries >= MAX_RETRIES) {
+            this.#failTask(task, `Download failed after ${MAX_RETRIES} worker errors`);
+          } else {
+            task.taskStatus = 'pending';
+          }
+        }
       }
     }
     this.#dispatch();
+  }
+
+  #onDownloadComplete(workerId: WorkerId, taskId: TaskId, payload: { etag: string; data: ArrayBuffer }) {
+    const task = this.#taskQ.get(taskId);
+    this.#markIdle(workerId);
+    if (!task || task.taskOp !== 'download') return;
+
+    task.taskStatus = 'completed';
+    task.resolve({
+      taskId,
+      fileId: task.fileId,
+      etag: payload.etag,
+      data: payload.data,
+    });
+    this.#taskQ.delete(taskId);
+    this.#updateTasksSummary();
+    this.#reconcile();
+  }
+
+  #onDownloadError(workerId: WorkerId, taskId: TaskId, payload: { error: string }) {
+    const task = this.#taskQ.get(taskId);
+    this.#markIdle(workerId);
+    if (!task || task.taskOp !== 'download') return;
+
+    task.retries++;
+    task.workerId = null;
+    task.startedAt = null;
+
+    if (task.retries >= MAX_RETRIES) {
+      this.#failTask(task, `Download failed after ${MAX_RETRIES} retries: ${payload.error}`);
+    } else {
+      task.taskStatus = 'pending';
+      this.#dispatch();
+    }
   }
 
   #pauseTask(taskId: TaskId) {
@@ -501,15 +654,23 @@ export class Tasker {
     task.paused = true;
     task.taskStatus = 'paused';
 
-    for (const assignment of task.assignments) {
-      if (assignment.status === 'in-progress') {
-        assignment.status = 'pending';
-        assignment.startedAt = null;
-        if (assignment.workerId) {
-          this.#markIdle(assignment.workerId);
-          assignment.workerId = null;
+    if (task.taskOp === 'upload') {
+      for (const assignment of task.assignments) {
+        if (assignment.status === 'in-progress') {
+          assignment.status = 'pending';
+          assignment.startedAt = null;
+          if (assignment.workerId) {
+            this.#markIdle(assignment.workerId);
+            assignment.workerId = null;
+          }
         }
       }
+    } else if (task.taskOp === 'download') {
+      if (task.workerId) {
+        this.#markIdle(task.workerId);
+        task.workerId = null;
+      }
+      task.startedAt = null;
     }
     this.#updateTasksSummary();
   }
@@ -517,9 +678,13 @@ export class Tasker {
   #resumeTask(taskId: TaskId) {
     const task = this.#taskQ.get(taskId);
     if (!task || task.aborted || !task.paused) return;
-
     task.paused = false;
-    task.taskStatus = task.assignments.some(a => a.status === 'completed') ? 'in-progress' : 'pending';
+    if (task.taskOp === 'download') {
+      task.taskStatus = 'pending'; // was missing
+      task.startedAt = null;
+    } else if (task.taskOp === 'upload') {
+      task.taskStatus = task.assignments.some(a => a.status === 'completed') ? 'in-progress' : 'pending';
+    }
     this.#updateTasksSummary();
     this.#reconcile();
   }
@@ -559,14 +724,13 @@ export class Tasker {
       reject = rej;
     });
 
-    const task: TaskQItem = {
+    const task: TaskQUploadItem = {
       taskStatus: 'pending',
+      taskOp: 'upload',
       taskId,
       memberId: creds.memberId,
       vaultId: creds.vaultId,
       fileId,
-      s3KeyPrefix: `${creds.vaultId}/${fileId}`,
-      authToken: v.getAuthToken(),
       encKey,
       vaultRef: v,
       source: data,
@@ -622,6 +786,62 @@ export class Tasker {
     onProgress?: UploadOptions['onProgress'],
   ) {
     return this.upload(v, fileId, data, encKey, { expectedEtag, onProgress });
+  }
+
+  download(
+    v: VaultController,
+    fileId: FileId,
+    encKey: RawAEADKey,
+    options: DownloadOptions = {},
+  ): TaskQHandle<DownloadResult> {
+    const taskId = generateRandomUUID() as TaskId;
+    const creds = v.getVaultCredentials();
+
+    let resolve!: (r: DownloadResult) => void;
+    let reject!: (e: Error) => void;
+    const promise = new Promise<DownloadResult>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+
+    const task: TaskQDownloadItem = {
+      taskStatus: 'pending',
+      taskOp: 'download',
+      taskId,
+      memberId: creds.memberId,
+      vaultId: creds.vaultId,
+      fileId,
+      encKey,
+      vaultRef: v,
+      options,
+      resolve,
+      reject,
+      aborted: false,
+      paused: false,
+      workerId: null,
+      startedAt: null,
+      retries: 0,
+    };
+
+    this.#taskQ.set(taskId, task as any);
+    this.#updateTasksSummary();
+    this.#reconcile();
+
+    return {
+      taskId,
+      fileId,
+      promise,
+      abort: () => {
+        task.aborted = true;
+        task.reject(new Error('Download aborted'));
+        this.#taskQ.delete(taskId);
+        this.#updateTasksSummary();
+        this.#reconcile();
+      },
+      pause: () => this.#pauseTask(taskId),
+      resume: () => this.#resumeTask(taskId),
+      isPaused: () => task.paused,
+    };
   }
 
   hookVault(v: VaultController) {

@@ -1,4 +1,12 @@
-import type { VaultId, VaultType, MemberId, Base64, Timestamp, Base64Encrypted } from '../shared/Consts';
+import type {
+  VaultId,
+  VaultType,
+  MemberId,
+  Base64,
+  Timestamp,
+  Base64Encrypted,
+  CollectionType,
+} from '../shared/Consts';
 import type { MemberEncryptedDetail, MemberInfoBasics, MemberSlot } from './Members';
 import type { Collection } from './collections/Collection';
 import type { AEADCryptoKey, RawAEADKey } from '../crypto/CryptoAEAD';
@@ -8,10 +16,10 @@ import { CryptoPQ } from '../crypto/CryptoPQ';
 import { sha256 } from '../crypto/CryptoUtils';
 import { generateCanonicalJSON, now, uint8ArrayToBase64, base64ToUint8Array, fromUint8Array } from '../shared/Helpers';
 import { makeRequest } from './ApiClient';
-import { isValidVaultManifest } from '../shared/Validators';
+import { isValidCollectionName, isValidCollectionType, isValidVaultManifest } from '../shared/Validators';
 import { VAULT_TYPE } from '../shared/Consts';
 import { IS_MANAGER_ROLE } from '../shared/Consts';
-import { getManagerKey, decryptMemberList, getCollectionKey } from './Members';
+import { getManagerKey, decryptMemberList, getCollectionsKey } from './Members';
 import { CollectionController } from './collections/Collection';
 import { AEAD } from '../crypto/CryptoAEAD';
 import { getMemberFromMemberSlots } from '../shared/Validators';
@@ -41,16 +49,16 @@ export type Vault = {
 };
 
 export class VaultController {
-  #vaultManifest: Vault;
+  readonly #vaultManifest: Vault;
+
   #etag: string;
   #authToken: string | null = null;
   #activeMember: MemberInfoBasics;
   #persistent: boolean = false;
-
   #aeadVaultKey: AEADCryptoKey | null = null;
   #isManagerMember: boolean = false;
   #managersArea: { memberList: MemberEncryptedDetail[]; key: AEADCryptoKey } | null = null;
-  #collectionKey: AEADCryptoKey | null = null;
+  #collectionsKey: AEADCryptoKey | null = null;
   // #collections: CollectionController[] = [];
 
   readonly collections$ = new ReactiveValue<CollectionController[]>([]);
@@ -125,14 +133,14 @@ export class VaultController {
         memberList: await decryptMemberList(vault.payload.managerOnlyMemberList, managersKey),
       };
       this.#isManagerMember = true;
-      this.#collectionKey = await getCollectionKey(aeadMasterKeyRaw as Uint8Array);
+      this.#collectionsKey = await getCollectionsKey(aeadMasterKeyRaw as Uint8Array);
     } else {
       this.#isManagerMember = false;
-      this.#collectionKey = this.#aeadVaultKey;
+      this.#collectionsKey = this.#aeadVaultKey;
     }
     if (vault.payload.collectionsEncrypted && vault.payload.collectionsEncrypted.length > 0) {
       const collectionsDecrypted = await AEAD.decrypt(
-        this.#collectionKey!,
+        this.#collectionsKey!,
         base64ToUint8Array(vault.payload.collectionsEncrypted),
       );
       const collections = JSON.parse(fromUint8Array(collectionsDecrypted)) as Collection[];
@@ -197,7 +205,7 @@ export class VaultController {
     };
   }
 
-  listCollections(type?: string): CollectionController[] {
+  listCollections(type?: CollectionType): CollectionController[] {
     const all = this.collections$.value;
     return type ? all.filter(c => c.collection.collectionType === type) : all;
   }
@@ -217,6 +225,7 @@ export class VaultController {
     }
     return null;
   }
+
   addCollection(col: CollectionController) {
     this.collections$.update(arr => arr.push(col));
   }
@@ -224,6 +233,37 @@ export class VaultController {
   removeCollection(id: string) {
     this.collections$.set(this.collections$.value.filter(c => c.collection.collectionId !== id));
   }
+
+  createCollection(name: string, type: CollectionType): void {
+    if (!isValidCollectionName(name)) {
+      throw new Error('Invalid collection name');
+    }
+    if (!isValidCollectionType(type)) {
+      throw new Error('Invalid collection type');
+    }
+    if (this.isManagerMember() === false || this.#collectionsKey === null) {
+      throw new Error('Only manager members can create collections in this vault');
+    }
+    // const newCollection = 'test';
+    // this.addCollection(newCollection);
+    // return newCollection;
+  }
+
+  // getCollectionOrCreateByName = async (name: string, type: string): Promise<CollectionController> => {
+  //   let collection = this.getCollectionByName(name);
+  //   if (collection) {
+  //     return collection;
+  //   }
+  //   // create new collection
+  //   const newCollection = CollectionController.createNewCollection(
+  //     name,
+  //     type,
+  //     this.#vaultManifest.payload.id,
+  //     this.#collectionKey as unknown as RawAEADKey,
+  //   );
+  //   this.addCollection(newCollection);
+  //   return newCollection;
+  // };
 
   timeToUpdate = () => {
     console.warn('TIME TO UPDATE VAULT DATA');

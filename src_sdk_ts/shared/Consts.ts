@@ -25,6 +25,13 @@ export const NAME_MAPPING = 'N';
 
 export const RECOVERY_DEVICE_NAME = '__RECOVERY__';
 
+export const COLLECTION_TYPES: Record<CollectionType, CollectionType> = Object.freeze({
+  VFS: 'VFS',
+  KV: 'KV',
+  LIST: 'LIST',
+  CRDTLIST: 'CRDTLIST',
+});
+
 export const VAULT_TYPE: Record<string, VaultType> = Object.freeze({
   account: 'a',
   team: 't',
@@ -164,6 +171,8 @@ export const TOKEN_EXPIRATION_SECONDS = 1000 * 60 * 60 * 6; // 6 hours
 export const CHUNK_TTL_SECONDS = 60 * 15; // 15 minutes
 export const ETAG_TTL_SECONDS = 60 * 5; // 5 minutes
 
+export const SYNC_DEBOUNCE_MS = 310;
+
 export const KEM_KEY_LENGTH_BYTES = 64;
 export const DSA_KEY_LENGTH_BYTES = 32;
 export const TOKEN_LENGTH_BYTES = 64;
@@ -205,7 +214,12 @@ export const VALIDATION_RULES = {
     pattern: /^[a-f0-9]{64}$/,
     description: '64 hex characters (lowercase)',
   },
-
+  collectionName: {
+    minLength: 1,
+    maxLength: 64,
+    pattern: /^[a-zA-Z0-9_-]+$/,
+    description: 'Alphanumeric, underscore, and hyphen only',
+  },
   signedHeaders: {
     requiredFields: ['content-sha256', 'x-timestamp', 'x-request-id', 'x-signer-id', 'x-signature'],
   },

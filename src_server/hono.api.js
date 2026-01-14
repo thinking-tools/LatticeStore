@@ -18,7 +18,7 @@ api.use('*', async (c, next) => {
     c.env;
 
   if (!REDIS_URL || !REDIS_TOKEN || !S3_ACCESS_KEY_ID || !S3_SECRET_ACCESS_KEY || !S3_ENDPOINT || !S3_REGION) {
-    return c.json({ ok: false, message: 'Missing environment vars', status: 500 }, 500);
+    return c.json({ ok: false, message: 'Missing environment vars', statusCode: 500 }, 500);
   }
 
   const bytesLimit = USER_STORAGE_QUOTA ? parseInt(USER_STORAGE_QUOTA) : IO_GB;
@@ -113,6 +113,23 @@ api.post('check-updates', async c => {
 //   return c.json({ ok: true, message: 'Logout successful' });
 // });
 
+api.get('download', async c => {
+  const headers = c.req.raw.headers;
+  const ls = c.get('lattice');
+  if (!ls) {
+    return c.json({ ok: false, message: 'Service not initialized' }, 500);
+  }
+  const result = await ls.download(headers);
+  if (!result.ok) {
+    return c.json({ ok: false, message: result.message }, result.statusCode);
+  }
+  return c.body(result.data, result.statusCode, {
+    'Content-Type': 'application/octet-stream',
+    'Content-Disposition': `attachment; filename="${result.key}"`,
+    etag: result.etag,
+  });
+});
+
 api.put('upload', async c => {
   const body = await c.req.arrayBuffer();
   const headers = c.req.raw.headers;
@@ -121,7 +138,7 @@ api.put('upload', async c => {
     return c.json({ ok: false, message: 'Service not initialized' }, 500);
   }
   const result = await ls.upload(headers, body);
-  return c.json({ ok: result.ok, message: result.message, etag: result.etag }, result.status);
+  return c.json({ ok: result.ok, message: result.message, etag: result.etag }, result.statusCode);
   // const authTokenBearer = c.req.header('Authorization');
   // const providedAuthToken = authTokenBearer.split(' ')[1];
   // const userId = c.req.header('x-user-id');

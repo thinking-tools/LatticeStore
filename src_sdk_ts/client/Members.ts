@@ -115,13 +115,13 @@ export const getManagerKey = async (masterKeyRaw: Uint8Array): Promise<AEADCrypt
   return AEAD.importAEADKey(managersKey as RawAEADKey);
 };
 
-export const getCollectionKey = async (masterKeyRaw: Uint8Array): Promise<AEADCryptoKey> => {
-  const collectionKey = letscShake256(
+export const getCollectionsKey = async (masterKeyRaw: Uint8Array): Promise<AEADCryptoKey> => {
+  const collectionsKey = letscShake256(
     masterKeyRaw,
     toUint8Array(CUSTOM_COLLECTION_LIST_STRING),
     DEFAULT_AEAD_KEY_LENGTH_BYTES,
   ) as RawAEADKey;
-  return AEAD.importAEADKey(collectionKey as RawAEADKey);
+  return AEAD.importAEADKey(collectionsKey as RawAEADKey);
 };
 
 export const encryptMemberList = async (

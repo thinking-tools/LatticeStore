@@ -6,7 +6,16 @@ import { CHUNK_TTL_SECONDS } from '../shared/Consts.js';
 export type UploadResult = {
   ok: boolean;
   etag?: string;
-  status: number;
+  statusCode: number;
+  message?: string;
+};
+
+export type DownloadResult = {
+  ok: boolean;
+  data?: ArrayBuffer;
+  key?: string;
+  etag?: string;
+  statusCode: number;
   message?: string;
 };
 
@@ -29,35 +38,46 @@ export class Chunks {
     const s3Key = `${vaultId}/${chunkKey}`;
     const cacheKey = `${vaultId}::${chunkKey}::etag`;
 
-    // Precondition checks
+    // Only fetch etag if preconditions exist
     if (ifMatch || ifNoneMatch) {
       const currentEtag = await this.#getEtag(vaultId, chunkKey);
-
       if (ifNoneMatch === '*' && currentEtag) {
-        return { ok: false, status: 412, message: 'Object already exists' };
+        return { ok: false, statusCode: 412, message: 'Object already exists' };
       }
-
-      if (ifMatch && currentEtag && currentEtag !== ifMatch) {
-        return { ok: false, status: 412, message: 'ETag mismatch' };
+      if (ifMatch && currentEtag !== ifMatch) {
+        return { ok: false, statusCode: 412, message: 'ETag mismatch' };
       }
     }
-    const buffer = Buffer.from(data instanceof ArrayBuffer ? new Uint8Array(data) : data);
+    const buffer =
+      data instanceof Uint8Array ? Buffer.from(data.buffer, data.byteOffset, data.byteLength) : Buffer.from(data);
     const s3response = await this.#s3.putObject(s3Key, buffer, 'application/octet-stream');
     if (!s3response.ok) {
-      return { ok: false, status: s3response.status, message: 'S3 upload failed' };
+      return { ok: false, statusCode: s3response.status, message: 'S3 upload failed' };
     }
     let rawEtag = s3response.headers.get('etag');
     if (!rawEtag) {
       rawEtag = await this.#s3.getEtag(s3Key);
       if (!rawEtag) {
-        return { ok: false, status: 500, message: 'Failed to retrieve ETag after upload' };
+        return { ok: false, statusCode: 500, message: 'Failed to retrieve ETag after upload' };
       }
     }
     const etag = sanitizeETag(rawEtag);
     // console.log('Storing etag in cache:', cacheKey, etag);
     await this.#cache.set(cacheKey, etag, CHUNK_TTL_SECONDS * 1000);
 
-    return { ok: true, etag, status: 200 };
+    return { ok: true, etag, statusCode: 200 };
+  }
+
+  async download(vaultId: string, chunkKey: string): Promise<{ data: ArrayBuffer; etag: string; key: string } | null> {
+    const s3Key = `${vaultId}/${chunkKey}`;
+    const cacheKey = `${vaultId}::${chunkKey}::etag`;
+    const response = await this.#s3.getObjectResponse(s3Key);
+    if (!response) return null;
+
+    const etag = sanitizeETag(response.headers.get('etag') ?? '');
+    await this.#cache.set(cacheKey, etag, CHUNK_TTL_SECONDS * 1000);
+    const data = await response.arrayBuffer();
+    return { data, etag, key: chunkKey };
   }
 
   async #getEtag(vaultId: string, chunkKey: string): Promise<string | null> {

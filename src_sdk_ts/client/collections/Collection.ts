@@ -1,10 +1,14 @@
 import type { CollectionId, CollectionType, MemberId, VaultId, Timestamp } from '../../shared/Consts.js';
 
 import { ReactiveValue } from '../ReactiveValue.js';
-import { AEAD } from '../../crypto/CryptoAEAD.js';
-import type { AEADCryptoKey, RawAEADKey } from '../../crypto/CryptoAEAD';
+import type { RawAEADKey } from '../../crypto/CryptoAEAD';
+import { KVContent } from './KV.js';
+// import { Tasker, TaskQHandle, UploadResult } from '../Tasker.js';
+// import { VaultController } from '../Vault.js';
 // import { genId, now, uint8ArrayToBase64, uint8ArrayToHex } from '../Helpers.js';
 // import { generateRandomBytes } from '../CryptoUtils.js';
+
+// import { SYNC_DEBOUNCE_MS } from '../../shared/Consts.js';
 
 export interface CollectionContent<T = unknown> {
   readonly type: CollectionType;
@@ -18,8 +22,7 @@ export type CollectionMinimal = {
   collectionId: CollectionId;
   collectionType: CollectionType;
   collectionName: string;
-  collectionKey: string;
-  collectionEncryptionKeyMaterial?: string; // Base64Encrypted<Uint8Array>
+  collectionEncryptionKeyMaterial?: RawAEADKey; // Base64Encrypted<Uint8Array>
 };
 
 export type Collection = {
@@ -39,18 +42,33 @@ export type Collection = {
   collectionToDelete: boolean;
 };
 
-// export const collectionFactory = (name: string, type: CollectionType): boolean => {};
+type SyncState = 'idle' | 'pending' | 'syncing' | 'error';
 
 export class CollectionController<T extends CollectionContent = CollectionContent> {
-  #collection: Collection | CollectionMinimal;
+  readonly #collection: Collection | CollectionMinimal;
+  // readonly #encryptionKeyRaw: RawAEADKey;
+  readonly #s3KeyPath: string;
+  // readonly #vaultId: VaultId;
+
+  // #encryptionKey: AEADCryptoKey | null = null;
   #content: T | null = null;
-  #encryptionKey: Promise<AEADCryptoKey>;
-  #s3KeyPath: string; // vaultId/collectionId
+
+  // Sync infrastructure
+  // #tasker: Tasker | null = null;
+  // #vault: VaultController | null = null;
+  // #syncTimeout: ReturnType<typeof setTimeout> | null = null;
+  // #currentUpload: TaskQHandle<UploadResult> | null = null;
+  // #unsubscribe: (() => void) | null = null;
+
+  readonly syncState$ = new ReactiveValue<SyncState>('idle');
+  readonly lastError$ = new ReactiveValue<Error | null>(null);
 
   constructor(collection: Collection | CollectionMinimal, encryptionKey: RawAEADKey, vaultId: VaultId) {
     this.#collection = collection;
-    this.#encryptionKey = AEAD.importAEADKey(encryptionKey);
+    // this.#encryptionKeyRaw = encryptionKey;
     this.#s3KeyPath = `${vaultId}/${collection.collectionId}`;
+    console.warn(' instance created', encryptionKey);
+    // this.#vaultId = vaultId;
   }
 
   get collection(): Collection | CollectionMinimal {
@@ -70,10 +88,6 @@ export class CollectionController<T extends CollectionContent = CollectionConten
     return this.#s3KeyPath;
   }
 
-  get encryptionKey(): Promise<AEADCryptoKey> {
-    return this.#encryptionKey;
-  }
-
   /** Load and decrypt collection from S3 */
   // async load(encryptedBytes: Uint8Array): Promise<void> {
   //   const decrypted = await AEAD.decrypt(this.#encryptionKey, encryptedBytes);
@@ -91,15 +105,15 @@ export class CollectionController<T extends CollectionContent = CollectionConten
   // }
 
   /** Create new empty collection */
-  // create(): void {
-  //   switch (this.#collection.collectionType) {
-  //     case 'KV':
-  //       this.#content = new KVContent() as T;
-  //       break;
-  //     default:
-  //       throw new Error(`Unsupported collection type: ${this.#collection.collectionType}`);
-  //   }
-  // }
+  create(): void {
+    switch (this.#collection.collectionType) {
+      case 'KV':
+        this.#content = new KVContent() as unknown as T;
+        break;
+      default:
+        throw new Error(`Unsupported collection type: ${this.#collection.collectionType}`);
+    }
+  }
 
   /** Serialize and encrypt for S3 upload */
   // async save(): Promise<Uint8Array> {

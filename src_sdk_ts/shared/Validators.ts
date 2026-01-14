@@ -1,12 +1,19 @@
 import { sha256 } from '../crypto/CryptoUtils';
 import { CryptoPQ, ML_DSA_PUBLIC_KEY_SIZE, ML_DSA_SIGNATURE_SIZE } from '../crypto/CryptoPQ';
 import { base64ToUint8Array, generateCanonicalJSON, now } from './Helpers';
-import { VALIDATION_RULES as C, RESERVED_USERNAMES, ROLE, VAULT_TYPE, TIMESTAMP_TOLERANCE_MS } from './Consts';
+import {
+  VALIDATION_RULES as C,
+  RESERVED_USERNAMES,
+  ROLE,
+  VAULT_TYPE,
+  TIMESTAMP_TOLERANCE_MS,
+  COLLECTION_TYPES,
+} from './Consts';
 
 import type { LoginRequest } from '../client/ApiClient';
 import type { MemberSlot } from '../client/Members.js';
 import type { Vault } from '../client/Vault.js';
-import type { VaultType } from './Consts.js';
+import type { CollectionType, VaultType } from './Consts.js';
 
 const _isTimestampValid = (clientTime: number): boolean => {
   const serverTime = now();
@@ -154,6 +161,16 @@ export const validateLoginRequest = async (body: LoginRequest, vaultManifest: Va
     }
   }
   return false;
+};
+
+export const isValidCollectionName = (collectionName: string): boolean => {
+  if (typeof collectionName !== 'string') return false;
+  const trimmed = collectionName.trim();
+  const rules = C.collectionName;
+  return trimmed.length >= rules.minLength && trimmed.length <= rules.maxLength && rules.pattern.test(trimmed);
+};
+export const isValidCollectionType = (collectionType: CollectionType): boolean => {
+  return Object.values(COLLECTION_TYPES).includes(collectionType as CollectionType);
 };
 
 export const isValidVaultManifest = async (vaultManifest: Vault, expectedType: VaultType): Promise<boolean> => {

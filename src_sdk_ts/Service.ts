@@ -11,7 +11,7 @@ import type { S3Config } from 's3mini';
 import type { KeyvStoreAdapter } from 'keyv';
 import type { RegisterResponse, LoginRequest, LoginResponse, CheckRequest, CheckResponse } from './client/ApiClient';
 import type { Vault } from './client/Vault';
-import type { UploadResult } from './server/Chunks';
+import type { DownloadResult, UploadResult } from './server/Chunks';
 import type { MemberId, VaultId } from './shared/Consts.js';
 
 export class LatticeStoreService {
@@ -139,32 +139,46 @@ export class LatticeStoreService {
   }
 
   public async upload(headers: Headers, body: ArrayBuffer): Promise<UploadResult> {
-    const t0 = Date.now();
     const authToken = headers.get('Authorization')?.split(' ')[1];
     const memberId = headers.get('x-member-id') as MemberId;
     const vaultId = headers.get('x-vault-id') as VaultId;
     const chunkKey = headers.get('x-chunk-key');
-
     if (!authToken || !memberId || !vaultId || !chunkKey) {
-      return { ok: false, status: 400, message: 'Missing required headers' };
+      return { ok: false, statusCode: 400, message: 'Missing required headers' };
     }
 
     let valid = await this.#tokens.isValidToken(memberId, vaultId, authToken);
     if (!valid) {
-      return { ok: false, status: 401, message: 'Invalid token' };
+      return { ok: false, statusCode: 401, message: 'Invalid token' };
     }
-    const t1 = Date.now();
-    let resp = this.#chunks.upload(
+    let resp = await this.#chunks.upload(
       vaultId,
       chunkKey,
       body,
       headers.get('If-Match') ?? undefined,
       headers.get('If-None-Match') ?? undefined,
     );
-    const t2 = Date.now();
-    console.log(`Body/auth: ${t1 - t0}ms | Upload: ${t2 - t1}ms | Total: ${t2 - t0}ms`);
-
     return resp;
+  }
+
+  public async download(headers: Headers): Promise<DownloadResult> {
+    const authToken = headers.get('Authorization')?.split(' ')[1];
+    const memberId = headers.get('x-member-id') as MemberId;
+    const vaultId = headers.get('x-vault-id') as VaultId;
+    const chunkKey = headers.get('x-chunk-key');
+    if (!authToken || !memberId || !vaultId) {
+      return { ok: false, statusCode: 400, message: 'Missing required headers' };
+    }
+
+    let valid = await this.#tokens.isValidToken(memberId, vaultId, authToken);
+    if (!valid) {
+      return { ok: false, statusCode: 401, message: 'Invalid token' };
+    }
+    const resp = await this.#chunks.download(vaultId, chunkKey!);
+    if (!resp) {
+      return { ok: false, statusCode: 404, message: 'Chunk not found' };
+    }
+    return { ok: true, data: resp.data, etag: resp.etag, key: resp.key, statusCode: 200 };
   }
 
   // // ONLY FOR DEVELOPMENT AND TESTING PURPOSES
