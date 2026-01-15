@@ -156,18 +156,36 @@ const handleUploadBatch = async (params: UploadBatchParams) => {
 
   const aeadKey = await AEAD.importAEADKey(encKey);
   encKey.fill(0);
+
   const results = new Map<number, ChunkResult>();
-  const inFlight = new Map<number, Promise<void>>();
   let lastContiguous = startIndex - 1;
   let failed = false;
   let failError = '';
 
   const getChunkKey = (i: number) => (totalChunks === 1 ? fileId : `${fileId}_${i}`);
 
-  const upload = async (i: number, encrypted: Uint8Array) => {
-    if (failed) return;
+  // Generator reads chunks on-demand, minimal memory
+  async function* readChunks(): AsyncGenerator<{ idx: number; data: Uint8Array }> {
+    for (let i = startIndex; i <= endIndex && !failed; i++) {
+      const start = i * chunkSize;
+      const end = Math.min(start + chunkSize, totalBytes);
+      // ArrayBuffer: view (no copy). Blob/File: unavoidable read.
+      const data =
+        source instanceof ArrayBuffer
+          ? new Uint8Array(source, start, end - start)
+          : new Uint8Array(await source.slice(start, end).arrayBuffer());
+      yield { idx: i, data };
+    }
+  }
 
-    const chunkKey = getChunkKey(i);
+  const processChunk = async (idx: number, data: Uint8Array): Promise<void> => {
+    if (failed) return;
+    const t0 = performance.now();
+    const encrypted = await AEAD.encrypt(aeadKey, data as Uint8Array<ArrayBuffer>);
+    if (failed) return;
+    const t1 = performance.now();
+
+    const chunkKey = getChunkKey(idx);
     const headers: Record<string, string> = {
       'x-member-id': memberId,
       'x-vault-id': vaultId,
@@ -175,13 +193,13 @@ const handleUploadBatch = async (params: UploadBatchParams) => {
       'Content-Type': 'application/octet-stream',
     };
 
-    if (i === startIndex) {
+    if (idx === startIndex) {
       if (createOnly) headers['If-None-Match'] = '*';
       else if (expectedEtag) headers['If-Match'] = expectedEtag;
     }
-
+    const t2 = performance.now();
     const response = await authRequest(`${endpoint}/upload`, 'PUT', authToken, encrypted, headers);
-
+    const t3 = performance.now();
     if (!response.ok) {
       failed = true;
       if (response.status === 401) {
@@ -201,31 +219,34 @@ const handleUploadBatch = async (params: UploadBatchParams) => {
     }
 
     const etag = (await response.json()).etag || '';
-    const result: ChunkResult = { chunkIndex: i, chunkKey, chunkEtag: etag };
-    results.set(i, result);
+    const t4 = performance.now();
+    const result: ChunkResult = { chunkIndex: idx, chunkKey, chunkEtag: etag };
+    results.set(idx, result);
     while (results.has(lastContiguous + 1)) lastContiguous++;
+    console.log(
+      `Chunk ${idx} uploaded: enc ${(t1 - t0).toFixed(1)}ms, prep ${(t2 - t1).toFixed(1)}ms, upload ${(t3 - t2).toFixed(
+        1,
+      )}ms, total ${(t4 - t0).toFixed(1)}ms`,
+    );
     self.postMessage({ type: 'chunk-progress', taskId, ...result });
   };
 
   try {
-    for (let i = startIndex; i <= endIndex && !failed; i++) {
-      const start = i * chunkSize;
-      const end = Math.min(start + chunkSize, totalBytes);
-      const blob = source instanceof ArrayBuffer ? new Blob([source.slice(start, end)]) : source.slice(start, end);
-      const chunkData = new Uint8Array(await blob.arrayBuffer());
-      const encrypted = await AEAD.encrypt(aeadKey, chunkData);
+    const active = new Map<number, Promise<void>>();
 
-      while (inFlight.size >= CONCURRENT_UPLOADS) {
-        await Promise.race(inFlight.values());
+    for await (const { idx, data } of readChunks()) {
+      // Wait if at concurrency limit
+      while (active.size >= CONCURRENT_UPLOADS) {
+        await Promise.race(active.values());
       }
-
       if (failed) break;
 
-      const p = upload(i, encrypted).finally(() => inFlight.delete(i));
-      inFlight.set(i, p);
+      // Fire off encrypt+upload, don't await
+      const p = processChunk(idx, data).finally(() => active.delete(idx));
+      active.set(idx, p);
     }
 
-    await Promise.all(inFlight.values());
+    await Promise.all(active.values());
 
     const sortedResults = [...results.values()].sort((a, b) => a.chunkIndex - b.chunkIndex);
 
@@ -257,6 +278,4 @@ const handleUploadBatch = async (params: UploadBatchParams) => {
       error: (error as Error).message,
     });
   }
-  results.clear();
-  inFlight.clear();
 };

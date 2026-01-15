@@ -48,9 +48,7 @@ export class Chunks {
         return { ok: false, statusCode: 412, message: 'ETag mismatch' };
       }
     }
-    const buffer =
-      data instanceof Uint8Array ? Buffer.from(data.buffer, data.byteOffset, data.byteLength) : Buffer.from(data);
-    const s3response = await this.#s3.putObject(s3Key, buffer, 'application/octet-stream');
+    const s3response = await this.#s3.putObject(s3Key, data, 'application/octet-stream');
     if (!s3response.ok) {
       return { ok: false, statusCode: s3response.status, message: 'S3 upload failed' };
     }

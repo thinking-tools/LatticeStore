@@ -37,20 +37,20 @@
   "author": "",
   "description": "",
   "devDependencies": {
-    "@alpinejs/focus": "3.15.3",
-    "@alpinejs/persist": "3.15.3",
+    "@alpinejs/focus": "3.15.4",
+    "@alpinejs/persist": "3.15.4",
     "@tailwindcss/vite": "4.1.18",
-    "@types/node": "25.0.6",
-    "alpinejs": "3.15.3",
+    "@types/node": "25.0.8",
+    "alpinejs": "3.15.4",
     "concurrently": "^9.2.1",
     "daisyui": "5.5.14",
-    "hono": "4.11.3",
+    "hono": "4.11.4",
     "rimraf": "6.1.2",
     "tailwindcss": "4.1.18",
     "typescript": "5.9.3",
     "vite": "7.3.1",
-    "vitest": "4.0.16",
-    "wrangler": "4.58.0"
+    "vitest": "4.0.17",
+    "wrangler": "4.59.1"
   },
   "prettier": {
     "bracketSpacing": true,
@@ -68,6 +68,6 @@
     "@noble/post-quantum": "^0.5.2",
     "keyv": "^5.5.5",
     "keyv-upstash": "1.0.8",
-    "s3mini": "0.9.0"
+    "s3mini": "0.9.1"
   }
 }

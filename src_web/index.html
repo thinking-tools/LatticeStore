@@ -104,6 +104,7 @@
             ]);
             const encoded_msg = new TextEncoder().encode('Hello, Lattice! This is a test file.');
             // genearate simple upload
+            console.time('upload-download-test');
             const uploadResult = await account.upload(filename, encoded_msg.buffer, encKey, {
               contentType: 'text/plain',
               onProgress: progress => {
@@ -111,10 +112,9 @@
               },
             });
             const uploadResultData = await uploadResult.promise;
+            console.timeEnd('upload-download-test');
             console.log('Upload result:', uploadResultData);
-            // decode
-            const decoded_msg = new TextDecoder().decode(encoded_msg);
-            console.log('Decoded message:', decoded_msg);
+            console.time('download-test');
             const downloadResult = await account.download(filename, encKey, {
               onProgress: progress => {
                 console.log('Download progress:', progress);
@@ -122,7 +122,10 @@
             });
             console.log('Downloaded :', downloadResult);
             const downloadData = await downloadResult.promise;
+            console.timeEnd('download-test');
             const downloadedText = new TextDecoder().decode(downloadData.data);
+
+            console.log('Decoded message:', downloadedText);
           }
         },
         async logout() {
