@@ -6,15 +6,23 @@ import type {
   Timestamp,
   Base64Encrypted,
   CollectionType,
+  FileId,
 } from '../shared/Consts';
 import type { MemberEncryptedDetail, MemberInfoBasics, MemberSlot } from './Members';
-import type { Collection } from './collections/Collection';
+import type { CollectionMinimal } from './collections/Collection';
 import type { AEADCryptoKey, RawAEADKey } from '../crypto/CryptoAEAD';
 import type { LoginPayload, LoginRequest } from './ApiClient';
 
 import { CryptoPQ } from '../crypto/CryptoPQ';
 import { sha256 } from '../crypto/CryptoUtils';
-import { generateCanonicalJSON, now, uint8ArrayToBase64, base64ToUint8Array, fromUint8Array } from '../shared/Helpers';
+import {
+  generateCanonicalJSON,
+  now,
+  uint8ArrayToBase64,
+  base64ToUint8Array,
+  fromUint8Array,
+  toUint8Array,
+} from '../shared/Helpers';
 import { makeRequest } from './ApiClient';
 import { isValidCollectionName, isValidCollectionType, isValidVaultManifest } from '../shared/Validators';
 import { VAULT_TYPE } from '../shared/Consts';
@@ -24,6 +32,7 @@ import { CollectionController } from './collections/Collection';
 import { AEAD } from '../crypto/CryptoAEAD';
 import { getMemberFromMemberSlots } from '../shared/Validators';
 import { ReactiveValue } from './ReactiveValue';
+import { Tasker } from './Tasker';
 
 export type VaultRegistrationPayload = {
   version: number;
@@ -36,7 +45,7 @@ export type VaultRegistrationPayload = {
   managerOnlyMemberList: Base64Encrypted<MemberEncryptedDetail[]>; // managers only access
   managerOnlyArea: Base64Encrypted<Uint8Array>; // placeholder for future manager-only data
   keyEpoch: number; // increments when vault keys are rotated
-  collectionsEncrypted?: Base64Encrypted<Collection[]>; // Just pointers to collection channels, not collection state
+  collectionsEncrypted?: Base64Encrypted<CollectionMinimal[]>; // Just pointers to collection channels, not collection state
   createdAt: Timestamp;
   updatedAt: Timestamp;
 };
@@ -59,17 +68,26 @@ export class VaultController {
   #isManagerMember: boolean = false;
   #managersArea: { memberList: MemberEncryptedDetail[]; key: AEADCryptoKey } | null = null;
   #collectionsKey: AEADCryptoKey | null = null;
+  #serviceUrl: string = ' ';
   // #collections: CollectionController[] = [];
 
   readonly collections$ = new ReactiveValue<CollectionController[]>([]);
   readonly members$ = new ReactiveValue<MemberEncryptedDetail[]>([]);
 
   // #tasker: Tasker | null = null;
-  constructor(vaultManifest: Vault, etag: string, authToken: string, member: MemberInfoBasics, persistent: boolean) {
+  constructor(
+    vaultManifest: Vault,
+    etag: string,
+    authToken: string,
+    member: MemberInfoBasics,
+    serviceUrl: string,
+    persistent: boolean,
+  ) {
     this.#vaultManifest = vaultManifest;
     this.#etag = etag;
     this.#authToken = authToken;
     this.#activeMember = member;
+    this.#serviceUrl = serviceUrl;
     this.#persistent = persistent;
     console.warn('VaultController instance created', this.#etag);
   }
@@ -84,6 +102,7 @@ export class VaultController {
       memberId: member.memberId,
       timestamp: now(),
     } as LoginPayload;
+
     const payloadSha256uint8Array = (await sha256(generateCanonicalJSON(loginPayload), 'uint8array')) as Uint8Array;
     const loginBody = {
       payload: loginPayload,
@@ -104,7 +123,14 @@ export class VaultController {
       throw new Error('Invalid vault manifest received from server');
     }
 
-    let vault = new VaultController(vaultManifest, response.vaultEtag, response.authToken, member, persistent);
+    let vault = new VaultController(
+      vaultManifest,
+      response.vaultEtag,
+      response.authToken,
+      member,
+      serviceUrl,
+      persistent,
+    );
 
     await vault.unlockAndSetupVault();
     return vault;
@@ -143,12 +169,8 @@ export class VaultController {
         this.#collectionsKey!,
         base64ToUint8Array(vault.payload.collectionsEncrypted),
       );
-      const collections = JSON.parse(fromUint8Array(collectionsDecrypted)) as Collection[];
-      this.collections$.set(
-        collections.map(
-          c => new CollectionController(c, c.collectionKey as unknown as RawAEADKey, vault.payload.id as VaultId),
-        ),
-      );
+      const collections = JSON.parse(fromUint8Array(collectionsDecrypted)) as CollectionMinimal[];
+      this.collections$.set(collections.map(c => new CollectionController(c, vault.payload.id as VaultId)));
     }
     return true;
   };
@@ -207,11 +229,11 @@ export class VaultController {
 
   listCollections(type?: CollectionType): CollectionController[] {
     const all = this.collections$.value;
-    return type ? all.filter(c => c.collection.collectionType === type) : all;
+    return type ? all.filter(c => c.getType() === type) : all;
   }
 
   getCollectionById(collectionId: string): CollectionController | null {
-    const col = this.collections$.value.find(c => c.collection.collectionId === collectionId);
+    const col = this.collections$.value.find(c => c.getId() === collectionId);
     if (col) {
       return col;
     }
@@ -219,34 +241,53 @@ export class VaultController {
   }
 
   getCollectionByName(name: string): CollectionController | null {
-    const col = this.collections$.value.find(c => c.collection.collectionName === name);
+    const col = this.collections$.value.find(c => c.getName() === name);
     if (col) {
       return col;
     }
     return null;
   }
 
-  addCollection(col: CollectionController) {
+  async #addCollection(col: CollectionController) {
     this.collections$.update(arr => arr.push(col));
+    const collectionsMinimal: CollectionMinimal[] = this.collections$.value.map(c => c.getColMinimalRef());
+    if (!this.#collectionsKey) {
+      throw new Error('Collections key not available');
+    }
+    const collectionsEncrypted = await AEAD.encrypt(
+      this.#collectionsKey,
+      toUint8Array(JSON.stringify(collectionsMinimal)) as Uint8Array<ArrayBuffer>,
+    );
+    this.#vaultManifest.payload.collectionsEncrypted = uint8ArrayToBase64(collectionsEncrypted) as Base64Encrypted<
+      CollectionMinimal[]
+    >;
   }
 
   removeCollection(id: string) {
-    this.collections$.set(this.collections$.value.filter(c => c.collection.collectionId !== id));
+    this.collections$.set(this.collections$.value.filter(c => c.getId() !== id));
   }
 
-  createCollection(name: string, type: CollectionType): void {
-    if (!isValidCollectionName(name)) {
-      throw new Error('Invalid collection name');
-    }
-    if (!isValidCollectionType(type)) {
-      throw new Error('Invalid collection type');
-    }
-    if (this.isManagerMember() === false || this.#collectionsKey === null) {
+  async createCollection(name: string, type: CollectionType, tasker: Tasker): Promise<void> {
+    if (!isValidCollectionName(name)) throw new Error('Invalid collection name');
+    if (!isValidCollectionType(type)) throw new Error('Invalid collection type');
+    if (!this.isManagerMember() || this.#collectionsKey === null)
       throw new Error('Only manager members can create collections in this vault');
-    }
-    // const newCollection = 'test';
-    // this.addCollection(newCollection);
-    // return newCollection;
+    const collection = CollectionController.createNew(
+      name,
+      type,
+      this.#vaultManifest.payload.id as VaultId,
+      this.#activeMember.memberId,
+    );
+    const resp = tasker.upload(
+      this,
+      collection.getId() as unknown as FileId,
+      collection.serialize(),
+      collection.getEncKey(),
+    );
+    const uploadResult = await resp.promise;
+    console.warn('Collection upload result:', uploadResult);
+    await this.#addCollection(collection);
+    this.#saveUpdate();
   }
 
   // getCollectionOrCreateByName = async (name: string, type: string): Promise<CollectionController> => {
@@ -265,11 +306,39 @@ export class VaultController {
   //   return newCollection;
   // };
 
-  timeToUpdate = () => {
-    console.warn('TIME TO UPDATE VAULT DATA');
+  timeToFetchUpdate = () => {
+    console.warn('TIME TO FETCH VAULT DATA');
+  };
+
+  #saveUpdate = async (): Promise<void> => {
+    console.warn('SAVE UPDATE VAULT DATA');
+    const updatedPayload = {
+      ...this.#vaultManifest.payload,
+      updatedAt: now(),
+      keyEpoch: this.#vaultManifest.payload.keyEpoch + 1,
+    };
+    const payloadSha256uint8Array = (await sha256(generateCanonicalJSON(updatedPayload), 'uint8array')) as Uint8Array;
+    const updateVaultBody = {
+      payload: updatedPayload,
+      payloadHash: uint8ArrayToBase64(payloadSha256uint8Array),
+      signerId: this.#activeMember.memberId,
+      signature: uint8ArrayToBase64(CryptoPQ.sign(this.#activeMember.dsaKeys.secretKey, payloadSha256uint8Array)),
+    } as Vault;
+    const response = await makeRequest(`${this.#serviceUrl}/update`, 'PUT', {
+      prevEtag: this.#etag,
+      vault: updateVaultBody,
+    });
+    if (!response.ok) {
+      throw new Error(response.message || 'Registration failed');
+    }
   };
 
   isManagerMember(): boolean {
     return this.#isManagerMember;
   }
+
+  // _updateVault() {
+  //   console.warn('UPDATE VAULT MANIFEST');
+
+  // }
 }

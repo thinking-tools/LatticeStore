@@ -180,10 +180,8 @@ const handleUploadBatch = async (params: UploadBatchParams) => {
 
   const processChunk = async (idx: number, data: Uint8Array): Promise<void> => {
     if (failed) return;
-    const t0 = performance.now();
     const encrypted = await AEAD.encrypt(aeadKey, data as Uint8Array<ArrayBuffer>);
     if (failed) return;
-    const t1 = performance.now();
 
     const chunkKey = getChunkKey(idx);
     const headers: Record<string, string> = {
@@ -197,9 +195,7 @@ const handleUploadBatch = async (params: UploadBatchParams) => {
       if (createOnly) headers['If-None-Match'] = '*';
       else if (expectedEtag) headers['If-Match'] = expectedEtag;
     }
-    const t2 = performance.now();
     const response = await authRequest(`${endpoint}/upload`, 'PUT', authToken, encrypted, headers);
-    const t3 = performance.now();
     if (!response.ok) {
       failed = true;
       if (response.status === 401) {
@@ -219,15 +215,10 @@ const handleUploadBatch = async (params: UploadBatchParams) => {
     }
 
     const etag = (await response.json()).etag || '';
-    const t4 = performance.now();
     const result: ChunkResult = { chunkIndex: idx, chunkKey, chunkEtag: etag };
     results.set(idx, result);
     while (results.has(lastContiguous + 1)) lastContiguous++;
-    console.log(
-      `Chunk ${idx} uploaded: enc ${(t1 - t0).toFixed(1)}ms, prep ${(t2 - t1).toFixed(1)}ms, upload ${(t3 - t2).toFixed(
-        1,
-      )}ms, total ${(t4 - t0).toFixed(1)}ms`,
-    );
+
     self.postMessage({ type: 'chunk-progress', taskId, ...result });
   };
 

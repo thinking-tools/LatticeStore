@@ -857,7 +857,7 @@ export class Tasker {
         vaultId: creds.vaultId,
         files: [{ s3Key: creds.vault.id, etag: creds.vault.etag }],
         vaultRef: v,
-        cb: v.timeToUpdate,
+        cb: v.timeToFetchUpdate,
       });
       this.#reconcile();
     } catch (e) {

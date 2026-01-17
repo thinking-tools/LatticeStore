@@ -3,6 +3,8 @@ import type { CollectionId, CollectionType, MemberId, VaultId, Timestamp } from 
 import { ReactiveValue } from '../ReactiveValue.js';
 import type { RawAEADKey } from '../../crypto/CryptoAEAD';
 import { KVContent } from './KV.js';
+import { genId, now, toUint8Array } from '../../shared/Helpers.js';
+import { generateRandomBytes } from '../../crypto/CryptoUtils.js';
 // import { Tasker, TaskQHandle, UploadResult } from '../Tasker.js';
 // import { VaultController } from '../Vault.js';
 // import { genId, now, uint8ArrayToBase64, uint8ArrayToHex } from '../Helpers.js';
@@ -19,38 +21,45 @@ export interface CollectionContent<T = unknown> {
 }
 
 export type CollectionMinimal = {
-  collectionId: CollectionId;
-  collectionType: CollectionType;
-  collectionName: string;
-  collectionEncryptionKeyMaterial?: RawAEADKey; // Base64Encrypted<Uint8Array>
+  colId: CollectionId;
+  colType: CollectionType;
+  colName: string;
+  colEncKey: RawAEADKey; // encrypted with collectionsKey
 };
 
-export type Collection = {
-  collectionId: CollectionId;
-  collectionType: CollectionType;
-  collectionName: string;
-  collectionEpoch: number;
-  collectionKey: string;
-  collectionEtag: string | null;
-  collectionEncryptionKeyMaterial?: string; // Base64Encrypted<Uint8Array>
-  collectionCreatedAt: Timestamp;
-  collectionCreatedById: MemberId | null;
-  collectionModifiedAt: Timestamp;
-  collectionModifiedById: MemberId | null;
-  collectionArchived: boolean;
-  collectionArchivedAt: Timestamp | null;
-  collectionToDelete: boolean;
+export type CollectionMeta = {
+  epoch: number;
+  etag: string | null;
+  createdAt: Timestamp;
+  createdById: MemberId | null;
+  modifiedAt: Timestamp;
+  modifiedById: MemberId | null;
+  archived: boolean;
+  archivedAt: Timestamp | null;
+  toDelete: boolean;
 };
+
+const defaultMeta = (memberId: MemberId | null): CollectionMeta => ({
+  epoch: 0,
+  etag: null,
+  createdAt: now(),
+  createdById: memberId,
+  modifiedAt: now(),
+  modifiedById: memberId,
+  archived: false,
+  archivedAt: null,
+  toDelete: false,
+});
 
 type SyncState = 'idle' | 'pending' | 'syncing' | 'error';
 
 export class CollectionController<T extends CollectionContent = CollectionContent> {
-  readonly #collection: Collection | CollectionMinimal;
-  // readonly #encryptionKeyRaw: RawAEADKey;
-  readonly #s3KeyPath: string;
-  // readonly #vaultId: VaultId;
-
-  // #encryptionKey: AEADCryptoKey | null = null;
+  readonly #minimal: CollectionMinimal;
+  readonly #s3Key: string;
+  readonly #vaultId: VaultId;
+  #meta?: CollectionMeta | null;
+  #metaBytesCache: Uint8Array<ArrayBuffer> | null = null;
+  #metaDirty = true;
   #content: T | null = null;
 
   // Sync infrastructure
@@ -63,29 +72,78 @@ export class CollectionController<T extends CollectionContent = CollectionConten
   readonly syncState$ = new ReactiveValue<SyncState>('idle');
   readonly lastError$ = new ReactiveValue<Error | null>(null);
 
-  constructor(collection: Collection | CollectionMinimal, encryptionKey: RawAEADKey, vaultId: VaultId) {
-    this.#collection = collection;
-    // this.#encryptionKeyRaw = encryptionKey;
-    this.#s3KeyPath = `${vaultId}/${collection.collectionId}`;
-    console.warn(' instance created', encryptionKey);
-    // this.#vaultId = vaultId;
+  constructor(collection: CollectionMinimal, vaultId: VaultId, meta?: CollectionMeta) {
+    this.#minimal = collection;
+    this.#s3Key = `${vaultId}/${collection.colId}`;
+    this.#vaultId = vaultId;
+    // if meta do not initialize
+    if (meta) {
+      this.#meta = meta;
+    }
+    console.log('CollectionController created:', this.#vaultId, this.#s3Key);
   }
 
-  get collection(): Collection | CollectionMinimal {
-    return this.#collection;
+  public getColMinimalRef(): CollectionMinimal {
+    return this.#minimal;
   }
 
-  get loaded(): boolean {
-    return this.#content !== null;
+  public getName(): string {
+    return this.#minimal.colName;
   }
-
+  public getId(): CollectionId {
+    return this.#minimal.colId;
+  }
+  public getType(): CollectionType {
+    return this.#minimal.colType;
+  }
+  public getEncKey(): RawAEADKey {
+    return this.#minimal.colEncKey;
+  }
   get content(): T {
-    if (!this.#content) throw new Error('Collection not loaded');
+    if (!this.#content) throw new Error('Not loaded');
     return this.#content;
   }
 
-  get s3Key(): string {
-    return this.#s3KeyPath;
+  // Collection.ts - complete the static factory
+  static createNew(
+    name: string,
+    type: CollectionType,
+    vaultId: VaultId,
+    memberId: MemberId | null,
+  ): CollectionController {
+    const minimal: CollectionMinimal = {
+      colId: `col_${genId()}` as CollectionId,
+      colType: type,
+      colName: name,
+      colEncKey: generateRandomBytes(32) as RawAEADKey,
+    };
+    const col = new CollectionController(minimal, vaultId, defaultMeta(memberId));
+    col.create(type); // init empty content
+    return col;
+  }
+
+  #getMetaBytes(): Uint8Array<ArrayBuffer> {
+    if (this.#metaDirty || !this.#metaBytesCache) {
+      this.#metaBytesCache = toUint8Array(JSON.stringify(this.#meta)) as Uint8Array<ArrayBuffer>;
+      this.#metaDirty = false;
+    }
+    return this.#metaBytesCache;
+  }
+
+  serialize(): Blob {
+    if (!this.#content) this.#content = this.create(this.#minimal.colType);
+
+    const metaBytes = this.#getMetaBytes();
+    const contentBytes = this.#content.serialize() as Uint8Array<ArrayBuffer>;
+
+    const header = new Uint8Array(4) as Uint8Array<ArrayBuffer>;
+    const len = metaBytes.length;
+    header[0] = len;
+    header[1] = len >> 8;
+    header[2] = len >> 16;
+    header[3] = len >> 24;
+
+    return new Blob([header, metaBytes, contentBytes]);
   }
 
   /** Load and decrypt collection from S3 */
@@ -105,13 +163,13 @@ export class CollectionController<T extends CollectionContent = CollectionConten
   // }
 
   /** Create new empty collection */
-  create(): void {
-    switch (this.#collection.collectionType) {
-      case 'KV':
-        this.#content = new KVContent() as unknown as T;
+  create(type: CollectionType): T {
+    switch (type) {
+      case 'KV' as CollectionType:
+        return new KVContent() as unknown as T;
         break;
       default:
-        throw new Error(`Unsupported collection type: ${this.#collection.collectionType}`);
+        throw new Error(`Unsupported collection type: ${this.#minimal.colType}`);
     }
   }
 
@@ -132,9 +190,9 @@ export class CollectionController<T extends CollectionContent = CollectionConten
     this.#content?.clearPending();
   }
 
-  updateEtag(etag: string): void {
-    if ('collectionEtag' in this.#collection) {
-      this.#collection.collectionEtag = etag;
-    }
-  }
+  // updateEtag(etag: string): void {
+  //   if ('collectionEtag' in this.#collection) {
+  //     this.#collection.collectionEtag = etag;
+  //   }
+  // }
 }

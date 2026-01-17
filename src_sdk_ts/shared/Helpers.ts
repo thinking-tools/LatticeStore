@@ -1,7 +1,7 @@
 import { generateRandomBytes } from '../crypto/CryptoUtils';
 
 import type { LoginPayload } from '../client/ApiClient';
-import type { Timestamp } from './Consts.js';
+import type { Timestamp, DataInput } from './Consts.js';
 import type { VaultRegistrationPayload } from '../client/Vault';
 
 export const encoder = new TextEncoder();
@@ -9,8 +9,21 @@ export const decoder = new TextDecoder();
 const _isNode = typeof process !== 'undefined' && process.versions?.node !== undefined;
 
 /** Converts a string to a Uint8Array using UTF-8 encoding. */
-export const toUint8Array = (data: string): Uint8Array => {
-  return encoder.encode(data);
+export const toUint8Array = (data: DataInput): Uint8Array | null => {
+  if (typeof data === 'string') {
+    return encoder.encode(data);
+  }
+  if (data instanceof ArrayBuffer) {
+    return new Uint8Array(data);
+  }
+  if (data instanceof Uint8Array) {
+    return data;
+  }
+  // Node Buffer
+  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(data)) {
+    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  }
+  return null;
 };
 
 /** Converts a Uint8Array back to a string using UTF-8 decoding. */

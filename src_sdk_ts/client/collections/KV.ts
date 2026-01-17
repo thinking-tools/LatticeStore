@@ -9,7 +9,7 @@ export class KVContent<V = unknown> implements CollectionContent<Map<string, V>>
   readonly data$ = new ReactiveValue<Map<string, V>>(new Map());
   #pending = new Map<string, { op: 'set' | 'delete'; value?: V }>();
 
-  constructor(initial?: Record<string, V>) {
+  constructor(initial: Record<string, V> = {}) {
     if (initial) this.data$.set(new Map(Object.entries(initial)));
   }
   static deserialize<V>(bytes: Uint8Array): KVContent<V> {

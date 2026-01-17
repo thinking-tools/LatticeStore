@@ -109,7 +109,7 @@ export const createNewCredentials = async (
 export const getManagerKey = async (masterKeyRaw: Uint8Array): Promise<AEADCryptoKey> => {
   const managersKey = letscShake256(
     masterKeyRaw,
-    toUint8Array(CUSTOM_MANAGER_KEY_STRING),
+    toUint8Array(CUSTOM_MANAGER_KEY_STRING) as Uint8Array,
     DEFAULT_AEAD_KEY_LENGTH_BYTES,
   ) as RawAEADKey;
   return AEAD.importAEADKey(managersKey as RawAEADKey);
@@ -118,7 +118,7 @@ export const getManagerKey = async (masterKeyRaw: Uint8Array): Promise<AEADCrypt
 export const getCollectionsKey = async (masterKeyRaw: Uint8Array): Promise<AEADCryptoKey> => {
   const collectionsKey = letscShake256(
     masterKeyRaw,
-    toUint8Array(CUSTOM_COLLECTION_LIST_STRING),
+    toUint8Array(CUSTOM_COLLECTION_LIST_STRING) as Uint8Array,
     DEFAULT_AEAD_KEY_LENGTH_BYTES,
   ) as RawAEADKey;
   return AEAD.importAEADKey(collectionsKey as RawAEADKey);

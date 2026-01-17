@@ -47,14 +47,14 @@ export const letscShake256 = (data: Uint8Array, customData: Uint8Array, outputLe
 };
 
 export const deriveSeeds = (masterSeed: Uint8Array) => ({
-  kemSeed: letscShake256(masterSeed, toUint8Array(CUSTOM_KEM_STRING), KEM_KEY_LENGTH_BYTES),
-  dsaSeed: letscShake256(masterSeed, toUint8Array(CUSTOM_DSA_STRING), DSA_KEY_LENGTH_BYTES),
+  kemSeed: letscShake256(masterSeed, toUint8Array(CUSTOM_KEM_STRING) as Uint8Array, KEM_KEY_LENGTH_BYTES),
+  dsaSeed: letscShake256(masterSeed, toUint8Array(CUSTOM_DSA_STRING) as Uint8Array, DSA_KEY_LENGTH_BYTES),
 });
 
 export const deriveKeyForRole = (role: MemberRole, rootKey: Uint8Array): Uint8Array =>
   IS_MANAGER_ROLE(role)
     ? rootKey
-    : letscShake256(rootKey, toUint8Array(CUSTOM_COLLECTION_LIST_STRING), DEFAULT_AEAD_KEY_LENGTH_BYTES);
+    : letscShake256(rootKey, toUint8Array(CUSTOM_COLLECTION_LIST_STRING) as Uint8Array, DEFAULT_AEAD_KEY_LENGTH_BYTES);
 
 export const getMemberIdFromPubkey = (dsaPublicKey: Uint8Array): string =>
-  uint8ArrayToHex(letscShake256(dsaPublicKey, toUint8Array(MEMBER_ID_STRING), 32)).toLowerCase();
+  uint8ArrayToHex(letscShake256(dsaPublicKey, toUint8Array(MEMBER_ID_STRING) as Uint8Array, 32)).toLowerCase();

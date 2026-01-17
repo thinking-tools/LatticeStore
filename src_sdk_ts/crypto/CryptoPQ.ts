@@ -78,7 +78,7 @@ export class CryptoPQ {
     if (secretKey.length !== ML_DSA_SECRET_KEY_SIZE)
       throw new CryptoPQError('Invalid secret key length', 'INVALID_SECRET_KEY_LENGTH');
     const msg = typeof message === 'string' ? toUint8Array(message) : message;
-    if (msg.length === 0) throw new CryptoPQError('Message cannot be empty', 'EMPTY_MESSAGE');
+    if (!msg || msg.length === 0) throw new CryptoPQError('Message cannot be empty', 'EMPTY_MESSAGE');
     return ml_dsa.sign(msg, secretKey);
   }
 
@@ -95,6 +95,7 @@ export class CryptoPQ {
     if (publicKey.length !== ML_DSA_PUBLIC_KEY_SIZE)
       throw new CryptoPQError('Invalid public key length', 'INVALID_PUBLIC_KEY_LENGTH');
     const msg = typeof message === 'string' ? toUint8Array(message) : message;
+    if (!msg || msg.length === 0) throw new CryptoPQError('Message cannot be empty', 'EMPTY_MESSAGE');
     return ml_dsa.verify(signature, msg, publicKey);
   }
 }
