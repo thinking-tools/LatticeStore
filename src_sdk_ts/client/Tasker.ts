@@ -403,26 +403,23 @@ export class Tasker {
 
     task.taskStatus = 'in-progress';
     if (task.taskOp === 'upload') {
-      this.#workers.get(workerId)!.worker.postMessage(
-        {
-          action: 'uploadBatch',
-          taskId: task.taskId,
-          fileId: task.fileId,
-          memberId: task.memberId,
-          vaultId: task.vaultId,
-          authToken: freshToken,
-          encKey: task.encKey,
-          startIndex: assignment.startIndex,
-          endIndex: assignment.endIndex,
-          totalChunks: task.totalChunks,
-          chunkSize: CHUNK_SIZE,
-          expectedEtag: task.options.expectedEtag,
-          createOnly: task.options.createOnly,
-          source: task.source,
-          totalBytes: task.totalBytes,
-        },
-        [task.source],
-      );
+      this.#workers.get(workerId)!.worker.postMessage({
+        action: 'uploadBatch',
+        taskId: task.taskId,
+        fileId: task.fileId,
+        memberId: task.memberId,
+        vaultId: task.vaultId,
+        authToken: freshToken,
+        encKey: task.encKey,
+        startIndex: assignment.startIndex,
+        endIndex: assignment.endIndex,
+        totalChunks: task.totalChunks,
+        chunkSize: CHUNK_SIZE,
+        expectedEtag: task.options.expectedEtag,
+        createOnly: task.options.createOnly,
+        source: task.source,
+        totalBytes: task.totalBytes,
+      });
     }
   }
 

@@ -24,7 +24,12 @@ import {
   toUint8Array,
 } from '../shared/Helpers';
 import { makeRequest } from './ApiClient';
-import { isValidCollectionName, isValidCollectionType, isValidVaultManifest } from '../shared/Validators';
+import {
+  isValidCollectionName,
+  isValidCollectionType,
+  isValidVaultManifest,
+  isUniqueCollectionName,
+} from '../shared/Validators';
 import { VAULT_TYPE } from '../shared/Consts';
 import { IS_MANAGER_ROLE } from '../shared/Consts';
 import { getManagerKey, decryptMemberList, getCollectionsKey } from './Members';
@@ -57,6 +62,14 @@ export type Vault = {
   signature: Base64<Uint8Array>;
 };
 
+export type VaultUpdate = {
+  prevEtag: string;
+  payload: VaultRegistrationPayload;
+  payloadHash: Base64<Uint8Array>;
+  signerId: MemberId;
+  signature: Base64<Uint8Array>;
+};
+
 export class VaultController {
   readonly #vaultManifest: Vault;
 
@@ -70,6 +83,8 @@ export class VaultController {
   #collectionsKey: AEADCryptoKey | null = null;
   #serviceUrl: string = ' ';
   // #collections: CollectionController[] = [];
+
+  #pendingCollections = new Set<string>();
 
   readonly collections$ = new ReactiveValue<CollectionController[]>([]);
   readonly members$ = new ReactiveValue<MemberEncryptedDetail[]>([]);
@@ -215,6 +230,10 @@ export class VaultController {
     return Promise.resolve(false);
   }
 
+  getEtag() {
+    return this.#etag;
+  }
+
   getVaultCredentials() {
     return {
       vaultId: this.#vaultManifest.payload.id,
@@ -247,13 +266,10 @@ export class VaultController {
     }
     return null;
   }
+  async #encryptAndUpdateCollectionsList(): Promise<void> {
+    if (!this.#collectionsKey) throw new Error('Collections key not available');
 
-  async #addCollection(col: CollectionController) {
-    this.collections$.update(arr => arr.push(col));
     const collectionsMinimal: CollectionMinimal[] = this.collections$.value.map(c => c.getColMinimalRef());
-    if (!this.#collectionsKey) {
-      throw new Error('Collections key not available');
-    }
     const collectionsEncrypted = await AEAD.encrypt(
       this.#collectionsKey,
       toUint8Array(JSON.stringify(collectionsMinimal)) as Uint8Array<ArrayBuffer>,
@@ -267,9 +283,10 @@ export class VaultController {
     this.collections$.set(this.collections$.value.filter(c => c.getId() !== id));
   }
 
-  async createCollection(name: string, type: CollectionType, tasker: Tasker): Promise<void> {
+  async createCollection(name: string, type: CollectionType, tasker: Tasker): Promise<CollectionController> {
     if (!isValidCollectionName(name)) throw new Error('Invalid collection name');
     if (!isValidCollectionType(type)) throw new Error('Invalid collection type');
+    if (!isUniqueCollectionName(name, this.listCollections())) throw new Error('Collection name must be unique');
     if (!this.isManagerMember() || this.#collectionsKey === null)
       throw new Error('Only manager members can create collections in this vault');
     const collection = CollectionController.createNew(
@@ -278,16 +295,25 @@ export class VaultController {
       this.#vaultManifest.payload.id as VaultId,
       this.#activeMember.memberId,
     );
-    const resp = tasker.upload(
+    this.collections$.update(arr => arr.push(collection));
+    this.#pendingCollections.add(collection.getId());
+    const handle = tasker.upload(
       this,
       collection.getId() as unknown as FileId,
       collection.serialize(),
       collection.getEncKey(),
     );
-    const uploadResult = await resp.promise;
-    console.warn('Collection upload result:', uploadResult);
-    await this.#addCollection(collection);
-    this.#saveUpdate();
+    try {
+      const resp = await handle.promise;
+      console.warn('Collection upload successful:', resp);
+      this.#pendingCollections.delete(collection.getId());
+      await this.#encryptAndUpdateCollectionsList();
+      await this.#saveUpdate();
+    } catch (err) {
+      // Upload failed - collection stays in pending, will retry on next sync
+      console.error('Collection upload failed, queued for retry:', err);
+    }
+    return collection;
   }
 
   // getCollectionOrCreateByName = async (name: string, type: string): Promise<CollectionController> => {
@@ -315,22 +341,27 @@ export class VaultController {
     const updatedPayload = {
       ...this.#vaultManifest.payload,
       updatedAt: now(),
-      keyEpoch: this.#vaultManifest.payload.keyEpoch + 1,
     };
     const payloadSha256uint8Array = (await sha256(generateCanonicalJSON(updatedPayload), 'uint8array')) as Uint8Array;
     const updateVaultBody = {
+      prevEtag: this.#etag,
       payload: updatedPayload,
       payloadHash: uint8ArrayToBase64(payloadSha256uint8Array),
       signerId: this.#activeMember.memberId,
       signature: uint8ArrayToBase64(CryptoPQ.sign(this.#activeMember.dsaKeys.secretKey, payloadSha256uint8Array)),
-    } as Vault;
-    const response = await makeRequest(`${this.#serviceUrl}/update`, 'PUT', {
-      prevEtag: this.#etag,
-      vault: updateVaultBody,
-    });
+    } as VaultUpdate;
+    const headers = {
+      Authorization: `Bearer ${this.#authToken}`,
+      'x-member-id': this.#activeMember.memberId,
+      'x-vault-id': this.#vaultManifest.payload.id,
+      'x-chunk-key': this.#vaultManifest.payload.id,
+      'Content-Type': 'application/json',
+    };
+    const response = await makeRequest(`${this.#serviceUrl}/upload`, 'PUT', updateVaultBody, headers);
     if (!response.ok) {
-      throw new Error(response.message || 'Registration failed');
+      throw new Error(response.message || 'Update failed');
     }
+    this.#etag = response.newEtag;
   };
 
   isManagerMember(): boolean {

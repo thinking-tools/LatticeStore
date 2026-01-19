@@ -10,9 +10,10 @@ import Keyv from 'keyv';
 import type { S3Config } from 's3mini';
 import type { KeyvStoreAdapter } from 'keyv';
 import type { RegisterResponse, LoginRequest, LoginResponse, CheckRequest, CheckResponse } from './client/ApiClient';
-import type { Vault } from './client/Vault';
+import type { Vault, VaultUpdate } from './client/Vault';
 import type { DownloadResult, UploadResult } from './server/Chunks';
 import type { MemberId, VaultId } from './shared/Consts.js';
+import { fromUint8Array } from './shared/Helpers';
 
 export class LatticeStoreService {
   readonly #s3: S3mini;
@@ -143,6 +144,7 @@ export class LatticeStoreService {
     const memberId = headers.get('x-member-id') as MemberId;
     const vaultId = headers.get('x-vault-id') as VaultId;
     const chunkKey = headers.get('x-chunk-key');
+    const contentType = headers.get('Content-Type');
     if (!authToken || !memberId || !vaultId || !chunkKey) {
       return { ok: false, statusCode: 400, message: 'Missing required headers' };
     }
@@ -151,10 +153,21 @@ export class LatticeStoreService {
     if (!valid) {
       return { ok: false, statusCode: 401, message: 'Invalid token' };
     }
+    if (chunkKey === vaultId && contentType === 'application/json') {
+      try {
+        const bodyVault = JSON.parse(fromUint8Array(body as unknown as Uint8Array)) as VaultUpdate;
+        const resp = await this.#accounts.updateManifest(vaultId, memberId, bodyVault);
+        return resp;
+      } catch {
+        return { ok: false, statusCode: 400, message: 'Invalid JSON' };
+      }
+
+      // return { ok: false, statusCode: 400, message: 'Chunk key cannot be the same as vault ID' };
+    }
     let resp = await this.#chunks.upload(
       vaultId,
       chunkKey,
-      body,
+      body as ArrayBuffer,
       headers.get('If-Match') ?? undefined,
       headers.get('If-None-Match') ?? undefined,
     );

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
   <head>
     <meta charset="UTF-8" />
@@ -99,6 +99,7 @@
           if (account) {
             const listCollections = await account.listCollections();
             console.log('User collections:', listCollections);
+            // const createCol = await account.createNewCollection('My_Photos', 'KV');
             // const encKey = new Uint8Array([
             //   1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2,
             // ]);
@@ -127,8 +128,8 @@
 
             // console.log('Decoded message:', downloadedText);
 
-            const createCol = await account.createNewCollection('My_Documents', 'KV');
-            console.log('Created collection:', createCol);
+            // const docCollection = await account.createNewCollection('My_Documents5', 'KV');
+            // console.log('Created collection:', docCollection);
           }
         },
         async logout() {

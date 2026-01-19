@@ -92,8 +92,8 @@ export class Account extends EventTarget {
     return this.#accountVault.getCollectionById(collectionId);
   }
 
-  public createNewCollection(collectionName: string, collectionType: CollectionType): void {
-    this.#accountVault.createCollection(collectionName, collectionType, this.#tasker);
+  public createNewCollection(collectionName: string, collectionType: CollectionType): Promise<CollectionController> {
+    return this.#accountVault.createCollection(collectionName, collectionType, this.#tasker);
   }
 
   // public upload(fileId: FileId, data: DataSource, encKey: RawAEADKey, options?: UploadOptions) {

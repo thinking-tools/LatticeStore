@@ -14,6 +14,7 @@ import type { LoginRequest } from '../client/ApiClient';
 import type { MemberSlot } from '../client/Members.js';
 import type { Vault } from '../client/Vault.js';
 import type { CollectionType, VaultType } from './Consts.js';
+import { CollectionController } from '../client/collections/Collection';
 
 const _isTimestampValid = (clientTime: number): boolean => {
   const serverTime = now();
@@ -57,7 +58,7 @@ const _isMatchingManagerSigner = (body: Vault): boolean => {
   return member.memberRole === ROLE.OWNER || member.memberRole === ROLE.ADMIN;
 };
 
-const _isValidSignature = (messageString: string, signatureString: string, member: MemberSlot): boolean => {
+export const isValidSignature = (messageString: string, signatureString: string, member: MemberSlot): boolean => {
   if ([messageString, signatureString].some(v => !v?.trim()) || !member) {
     throw new Error('Missing or malformed signature components');
   }
@@ -156,7 +157,7 @@ export const validateLoginRequest = async (body: LoginRequest, vaultManifest: Va
     if (calculatedSha256 === body.payloadHash) {
       const memberSlot = getMemberFromMemberSlots(vaultManifest.payload.memberSlots, body.payload.memberId);
       if (memberSlot && _isTimestampValid(body.payload.timestamp)) {
-        return _isValidSignature(body.payloadHash, body.signature, memberSlot);
+        return isValidSignature(body.payloadHash, body.signature, memberSlot);
       }
     }
   }
@@ -173,6 +174,19 @@ export const isValidCollectionType = (collectionType: CollectionType): boolean =
   return Object.values(COLLECTION_TYPES).includes(collectionType as CollectionType);
 };
 
+export const isUniqueCollectionName = (
+  collectionName: string,
+  existingCollections: CollectionController[],
+): boolean => {
+  const normalizedNewName = collectionName.trim();
+  for (const collection of existingCollections) {
+    if (collection.getName() && collection.getName() === normalizedNewName) {
+      return false;
+    }
+  }
+  return true;
+};
+
 export const isValidVaultManifest = async (vaultManifest: Vault, expectedType: VaultType): Promise<boolean> => {
   if (
     _isValidVault(vaultManifest) &&
@@ -184,7 +198,7 @@ export const isValidVaultManifest = async (vaultManifest: Vault, expectedType: V
     if (memberSlot) {
       return (
         calculatedSha256 === vaultManifest.payloadHash &&
-        _isValidSignature(vaultManifest.payloadHash, vaultManifest.signature, memberSlot)
+        isValidSignature(vaultManifest.payloadHash, vaultManifest.signature, memberSlot)
       );
     }
   }

@@ -2,8 +2,22 @@ import { S3mini, sanitizeETag, runInBatches } from 's3mini';
 import { Keyv } from 'keyv';
 import { NAME_MAPPING, ETAG_TTL_SECONDS, VAULT_TYPE, MEMBER_STATUS, PERMISSIONS, MemberRole } from '../shared/Consts';
 
-import type { Vault } from '../client/Vault';
+import type { Vault, VaultUpdate } from '../client/Vault';
 import { checkListItem } from '../client/ApiClient';
+import { MemberSlot } from '../client/Members';
+import { sha256 } from '../crypto/CryptoUtils';
+import { generateCanonicalJSON } from '../shared/Helpers';
+import { isValidSignature } from '../shared/Validators';
+
+export type VaultUpdateResponse = {
+  ok: boolean;
+  statusCode: number;
+  message?: string;
+  newEtag?: string;
+  // On conflict, return server state for client merge
+  serverVault?: any;
+  serverEtag?: string;
+};
 
 const _s3manifestKey = (vaultId: string) => `${vaultId}/${vaultId}-manifest.json`;
 const _redisManifestKey = (vaultId: string) => `${vaultId}::manifest`;
@@ -79,15 +93,19 @@ export class Accounts {
 
   public async createAccount(body: Vault): Promise<boolean> {
     try {
-      const manifestKey = _s3manifestKey(body.payload.id);
-      const redisManifestKey = _redisManifestKey(body.payload.id);
+      const vaultId = body.payload.id;
+      const manifestKey = _s3manifestKey(vaultId);
+      const redisManifestKey = _redisManifestKey(vaultId);
       const redisNameMappingKey = _redisNameMappingKey(body.payload.name);
       const [s3PutResult] = await Promise.all([
         this.#s3.putObject(manifestKey, JSON.stringify(body)),
         this.#vaultRedis.set(redisManifestKey, body),
-        this.#vaultRedis.set(redisNameMappingKey, body.payload.id),
+        this.#vaultRedis.set(redisNameMappingKey, vaultId),
       ]);
-      console.log(`Account ${body.payload.id} with name ${body.payload.name} created successfully`, s3PutResult);
+      console.log(`Account ${vaultId} with name ${body.payload.name} created successfully`, s3PutResult);
+      // update etag cache
+      const etag = sanitizeETag(s3PutResult.headers.get('etag') as string);
+      this.#vaultRedis.set(_redisManifestEtagKey(vaultId), etag, ETAG_TTL_SECONDS);
       return s3PutResult.status === 200;
     } catch (error) {
       throw new Error(`Failed to create account ${body.payload.id}: ${(error as Error).message}`);
@@ -128,6 +146,75 @@ export class Accounts {
     }
 
     return changedIds;
+  }
+
+  public async updateManifest(
+    vaultId: string,
+    memberId: string,
+    vaultManifest: VaultUpdate,
+  ): Promise<VaultUpdateResponse> {
+    try {
+      const manifestVaultId = vaultManifest.payload.id;
+      const signerId = vaultManifest.signerId;
+      if (!vaultId || !manifestVaultId || manifestVaultId !== vaultId || !signerId || signerId !== memberId) {
+        return { ok: false, statusCode: 400, message: 'Invalid request' };
+      }
+      const prevEtag = vaultManifest.prevEtag;
+      const [currentVault, currentEtag] = await Promise.all([
+        this.#vaultRedis.get(_redisManifestKey(vaultId)),
+        this.#vaultRedis.get(_redisManifestEtagKey(vaultId)),
+      ]);
+      let serverVault = currentVault;
+      let serverEtag = currentEtag;
+      if (!serverVault) {
+        try {
+          const s3response = await this.#s3.getObjectResponse(_s3manifestKey(vaultId));
+          if (s3response) {
+            serverVault = await s3response.json();
+            serverEtag = sanitizeETag(s3response.headers.get('etag') as string);
+          }
+        } catch {
+          return { ok: false, statusCode: 404, message: 'Vault not found' };
+        }
+      }
+      if (!serverVault || !serverEtag) {
+        return { ok: false, statusCode: 404, message: 'Vault not found' };
+      }
+      if (!prevEtag || prevEtag !== serverEtag) {
+        return {
+          ok: false,
+          statusCode: 409,
+          message: 'Etag mismatch - vault modified',
+          serverVault,
+          serverEtag,
+        };
+      }
+      // verify signer is a member and active
+      const member = serverVault.payload.memberSlots.find((m: MemberSlot) => m.memberId === signerId);
+      if (!member || !member.memberRole || member.memberStatus !== MEMBER_STATUS.ACTIVE) {
+        return { ok: false, statusCode: 403, message: 'Signer is not an active member of the vault' };
+      }
+      const calculatedSha256 = await sha256(generateCanonicalJSON(vaultManifest.payload), 'base64');
+      if (calculatedSha256 !== vaultManifest.payloadHash) {
+        return { ok: false, statusCode: 400, message: 'Payload hash mismatch' };
+      }
+      if (!isValidSignature(vaultManifest.payloadHash, vaultManifest.signature, member)) {
+        return { ok: false, statusCode: 400, message: 'Invalid signature' };
+      }
+      const [s3PutResult] = await Promise.all([
+        this.#s3.putObject(_s3manifestKey(vaultId), JSON.stringify(vaultManifest)),
+        this.#vaultRedis.set(_redisManifestKey(vaultId), vaultManifest),
+      ]);
+      const newEtag = sanitizeETag(s3PutResult.headers.get('etag') as string);
+      await this.#vaultRedis.set(_redisManifestEtagKey(vaultId), newEtag, ETAG_TTL_SECONDS);
+      return {
+        ok: s3PutResult.status === 200,
+        statusCode: s3PutResult.status,
+        newEtag,
+      };
+    } catch (error) {
+      throw new Error(`Failed to update vault ${vaultId} manifest: ${(error as Error).message}`);
+    }
   }
 
   public getMemberRole(memberId: string, vaultManifest: Vault): MemberRole | null {

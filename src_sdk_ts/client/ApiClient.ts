@@ -1,5 +1,5 @@
 import type { Base64, MemberId } from '../shared/Consts';
-import type { Vault } from './Vault';
+import type { Vault, VaultUpdate } from './Vault';
 
 // ===== TYPES =====
 export type checkListItem = {
@@ -327,7 +327,7 @@ const _fetchRequest = async (url: string, options: RequestOptions = {}): Promise
 export const makeRequest = async <T = any>(
   url: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
-  body?: LoginRequest | Vault | CheckRequest,
+  body?: LoginRequest | Vault | CheckRequest | VaultUpdate,
   headers?: Record<string, string>,
 ): Promise<T> => {
   const parser = await _fetchRequest(url, {
