@@ -99,37 +99,13 @@
           if (account) {
             const listCollections = await account.listCollections();
             console.log('User collections:', listCollections);
-            // const createCol = await account.createNewCollection('My_Photos', 'KV');
-            // const encKey = new Uint8Array([
-            //   1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2,
-            // ]);
-            // const encoded_msg = new TextEncoder().encode('Hello, Lattice! This is a test file.');
-            // // genearate simple upload
-            // console.time('upload-download-test');
-            // const uploadResult = await account.upload(filename, encoded_msg.buffer, encKey, {
-            //   contentType: 'text/plain',
-            //   onProgress: progress => {
-            //     console.log('Upload progress:', progress);
-            //   },
-            // });
-            // const uploadResultData = await uploadResult.promise;
-            // console.timeEnd('upload-download-test');
-            // console.log('Upload result:', uploadResultData);
-            // console.time('download-test');
-            // const downloadResult = await account.download(filename, encKey, {
-            //   onProgress: progress => {
-            //     console.log('Download progress:', progress);
-            //   },
-            // });
-            // console.log('Downloaded :', downloadResult);
-            // const downloadData = await downloadResult.promise;
-            // console.timeEnd('download-test');
-            // const downloadedText = new TextDecoder().decode(downloadData.data);
 
-            // console.log('Decoded message:', downloadedText);
+            // dogCollection.set('jack', true);
+            // console.log('has entry after set: ' + dogCollection.has('jack'));
 
-            // const docCollection = await account.createNewCollection('My_Documents5', 'KV');
-            // console.log('Created collection:', docCollection);
+            // dogCollection.set('jack2', 'russel?');
+            // const jackValue = dogCollection.get('jack2');
+            // console.log('jack2 value: ' + jackValue);
           }
         },
         async logout() {

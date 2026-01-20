@@ -97,8 +97,9 @@ const handleWatch = async (params: WatchParams) => {
 };
 
 const handleDownload = async (params: DownloadParams) => {
-  const { taskId, fileId, memberId, vaultId, authToken, encKey } = params;
-
+  const { taskId, fileId, memberId, vaultId, authToken } = params;
+  const rawKey = params.encKey;
+  const encKey = rawKey instanceof Uint8Array ? rawKey : new Uint8Array(Object.values(rawKey));
   try {
     const aeadKey = await AEAD.importAEADKey(encKey);
     encKey.fill(0);
@@ -143,7 +144,6 @@ const handleUploadBatch = async (params: UploadBatchParams) => {
     memberId,
     vaultId,
     authToken,
-    encKey,
     startIndex,
     endIndex,
     totalChunks,
@@ -153,7 +153,8 @@ const handleUploadBatch = async (params: UploadBatchParams) => {
     expectedEtag,
     createOnly,
   } = params;
-
+  const rawKey = params.encKey;
+  const encKey = rawKey instanceof Uint8Array ? rawKey : new Uint8Array(Object.values(rawKey));
   const aeadKey = await AEAD.importAEADKey(encKey);
   encKey.fill(0);
 

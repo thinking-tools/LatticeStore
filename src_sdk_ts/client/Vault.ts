@@ -7,9 +7,10 @@ import type {
   Base64Encrypted,
   CollectionType,
   FileId,
+  CollectionId,
 } from '../shared/Consts';
 import type { MemberEncryptedDetail, MemberInfoBasics, MemberSlot } from './Members';
-import type { CollectionMinimal } from './collections/Collection';
+import type { CollectionContent, CollectionMinimal } from './collections/Collection';
 import type { AEADCryptoKey, RawAEADKey } from '../crypto/CryptoAEAD';
 import type { LoginPayload, LoginRequest } from './ApiClient';
 
@@ -185,10 +186,14 @@ export class VaultController {
         base64ToUint8Array(vault.payload.collectionsEncrypted),
       );
       const collections = JSON.parse(fromUint8Array(collectionsDecrypted)) as CollectionMinimal[];
-      this.collections$.set(collections.map(c => new CollectionController(c, vault.payload.id as VaultId)));
+      this.collections$.set(collections.map(c => new CollectionController(c, this)));
     }
     return true;
   };
+
+  getId(): VaultId {
+    return this.#vaultManifest.payload.id;
+  }
 
   // addTasker(tasker: any) {
   //   this.#tasker = tasker;
@@ -251,18 +256,19 @@ export class VaultController {
     return type ? all.filter(c => c.getType() === type) : all;
   }
 
-  getCollectionById(collectionId: string): CollectionController | null {
+  async getCollectionById(tasker: Tasker, collectionId: string): Promise<CollectionContent | null> {
     const col = this.collections$.value.find(c => c.getId() === collectionId);
     if (col) {
-      return col;
+      return col.load(tasker);
     }
     return null;
   }
 
-  getCollectionByName(name: string): CollectionController | null {
+  async getCollectionByName(tasker: Tasker, name: string): Promise<CollectionContent | null> {
     const col = this.collections$.value.find(c => c.getName() === name);
     if (col) {
-      return col;
+      return col.load(tasker);
+      // return col;
     }
     return null;
   }
@@ -279,22 +285,29 @@ export class VaultController {
     >;
   }
 
-  removeCollection(id: string) {
+  async removeCollectionById(id: CollectionId): Promise<boolean> {
     this.collections$.set(this.collections$.value.filter(c => c.getId() !== id));
+    await this.#encryptAndUpdateCollectionsList();
+    await this.#saveUpdate();
+    return true;
   }
 
-  async createCollection(name: string, type: CollectionType, tasker: Tasker): Promise<CollectionController> {
+  async renameCollectionById(id: CollectionId, newName: string): Promise<boolean> {
+    const collection = this.collections$.value.find(c => c.getId() === id);
+    if (!collection) throw new Error('Collection not found');
+    collection.setName(newName, this.#activeMember.memberId);
+    await this.#encryptAndUpdateCollectionsList();
+    await this.#saveUpdate();
+    return true;
+  }
+
+  async createCollection(name: string, type: CollectionType, tasker: Tasker): Promise<CollectionContent> {
     if (!isValidCollectionName(name)) throw new Error('Invalid collection name');
     if (!isValidCollectionType(type)) throw new Error('Invalid collection type');
     if (!isUniqueCollectionName(name, this.listCollections())) throw new Error('Collection name must be unique');
     if (!this.isManagerMember() || this.#collectionsKey === null)
       throw new Error('Only manager members can create collections in this vault');
-    const collection = CollectionController.createNew(
-      name,
-      type,
-      this.#vaultManifest.payload.id as VaultId,
-      this.#activeMember.memberId,
-    );
+    const collection = CollectionController.createNew(name, type, this, this.#activeMember.memberId);
     this.collections$.update(arr => arr.push(collection));
     this.#pendingCollections.add(collection.getId());
     const handle = tasker.upload(
@@ -313,7 +326,7 @@ export class VaultController {
       // Upload failed - collection stays in pending, will retry on next sync
       console.error('Collection upload failed, queued for retry:', err);
     }
-    return collection;
+    return collection.content;
   }
 
   // getCollectionOrCreateByName = async (name: string, type: string): Promise<CollectionController> => {

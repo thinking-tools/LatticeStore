@@ -1,5 +1,5 @@
 import type { NetMonitorReturnType } from './NetworkUtils';
-import type { VaultId, TaskId, MemberId, FileId } from '../shared/Consts.js';
+import type { VaultId, TaskId, MemberId, FileId, CollectionId } from '../shared/Consts.js';
 import type { RawAEADKey } from '../crypto/CryptoAEAD.js';
 import { VaultController } from './Vault';
 import { generateRandomUUID } from '../crypto/CryptoUtils.js';
@@ -22,7 +22,7 @@ type TaskQItem = TaskQUploadItem | TaskQDownloadItem;
 
 type TaskSummary = {
   taskId: TaskId;
-  fileId: FileId;
+  fileId: FileId | CollectionId;
   status: TaskStatus;
   totalBytes: number;
   bytesUploaded: number;
@@ -56,7 +56,7 @@ export type DownloadOptions = {
 
 export type UploadProgress = {
   taskId: TaskId;
-  fileId: FileId;
+  fileId: FileId | CollectionId;
   chunkIndex: number;
   totalChunks: number;
   bytesUploaded: number;
@@ -65,14 +65,14 @@ export type UploadProgress = {
 
 export type UploadResult = {
   taskId: TaskId;
-  fileId: FileId;
+  fileId: FileId | CollectionId;
   chunks: ChunkResult[];
   totalBytes: number;
 };
 
 export type TaskQHandle<T> = {
   taskId: TaskId;
-  fileId: FileId;
+  fileId: FileId | CollectionId;
   promise: Promise<T>;
   abort: () => void;
   pause: () => void;
@@ -82,7 +82,7 @@ export type TaskQHandle<T> = {
 
 export type DownloadProgress = {
   taskId: TaskId;
-  fileId: FileId;
+  fileId: FileId | CollectionId;
   chunkIndex: number;
   totalChunks: number;
   etag: string;
@@ -91,7 +91,7 @@ export type DownloadProgress = {
 
 export type DownloadResult = {
   taskId: TaskId;
-  fileId: FileId;
+  fileId: FileId | CollectionId;
   etag: string;
   data: ArrayBuffer;
 };
@@ -102,7 +102,7 @@ type TaskQUploadItem = {
   taskId: TaskId;
   memberId: MemberId;
   vaultId: VaultId;
-  fileId: FileId;
+  fileId: FileId | CollectionId;
   encKey: RawAEADKey;
   vaultRef: VaultController;
   source: DataSource;
@@ -122,7 +122,7 @@ type TaskQDownloadItem = {
   taskId: TaskId;
   memberId: MemberId;
   vaultId: VaultId;
-  fileId: FileId;
+  fileId: FileId | CollectionId;
   encKey: RawAEADKey;
   vaultRef: VaultController;
   options: DownloadOptions;
@@ -693,12 +693,13 @@ export class Tasker {
 
   upload(
     v: VaultController,
-    fileId: FileId,
+    fileId: FileId | CollectionId,
     data: DataSource,
     encKey: RawAEADKey,
     options: UploadOptions = {},
   ): TaskQHandle<UploadResult> {
     const taskId = generateRandomUUID() as TaskId;
+    console.warn('Starting upload task:', taskId, 'fileId:', fileId, 'encKey:', encKey, typeof encKey);
     const creds = v.getVaultCredentials();
     const totalBytes = data instanceof ArrayBuffer ? data.byteLength : data.size;
     const totalChunks = Math.ceil(totalBytes / CHUNK_SIZE) || 1; // at least 1 for empty file
@@ -768,7 +769,7 @@ export class Tasker {
   /** Convenience: create-only upload (fails if exists) */
   create(
     v: VaultController,
-    fileId: FileId,
+    fileId: FileId | CollectionId,
     data: DataSource,
     encKey: RawAEADKey,
     onProgress?: UploadOptions['onProgress'],
@@ -779,7 +780,7 @@ export class Tasker {
   /** Convenience: overwrite with etag check */
   update(
     v: VaultController,
-    fileId: FileId,
+    fileId: FileId | CollectionId,
     data: DataSource,
     encKey: RawAEADKey,
     expectedEtag: string,
@@ -790,13 +791,12 @@ export class Tasker {
 
   download(
     v: VaultController,
-    fileId: FileId,
+    fileId: FileId | CollectionId,
     encKey: RawAEADKey,
     options: DownloadOptions = {},
   ): TaskQHandle<DownloadResult> {
     const taskId = generateRandomUUID() as TaskId;
     const creds = v.getVaultCredentials();
-
     let resolve!: (r: DownloadResult) => void;
     let reject!: (e: Error) => void;
     const promise = new Promise<DownloadResult>((res, rej) => {

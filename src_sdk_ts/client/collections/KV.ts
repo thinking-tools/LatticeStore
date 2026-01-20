@@ -13,7 +13,7 @@ export class KVContent<V = unknown> implements CollectionContent<Map<string, V>>
     if (initial) this.data$.set(new Map(Object.entries(initial)));
   }
   static deserialize<V>(bytes: Uint8Array): KVContent<V> {
-    if (bytes.length === 0) return new KVContent<V>();
+    if (bytes.byteLength === 0) return new KVContent<V>();
     const obj = JSON.parse(decoder.decode(bytes));
     return new KVContent<V>(obj);
   }
@@ -63,8 +63,8 @@ export class KVContent<V = unknown> implements CollectionContent<Map<string, V>>
       remote instanceof KVContent
         ? remote.data$.value
         : remote instanceof Map
-        ? remote
-        : new Map(Object.entries(remote));
+          ? remote
+          : new Map(Object.entries(remote));
 
     this.data$.update(local => {
       const merged = new Map([...local, ...remoteMap]);
@@ -88,8 +88,8 @@ export class KVContent<V = unknown> implements CollectionContent<Map<string, V>>
       data instanceof KVContent
         ? new Map(data.data$.value)
         : data instanceof Map
-        ? new Map(data)
-        : new Map(Object.entries(data));
+          ? new Map(data)
+          : new Map(Object.entries(data));
 
     this.data$.set(newMap);
     this.#pending.clear();

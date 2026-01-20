@@ -1,11 +1,11 @@
 // import type { DataSource, UploadOptions } from './Tasker';
-import type { MemberRole, MemberStatus, CollectionType } from '../shared/Consts'; // CollectionType
+import type { MemberRole, MemberStatus, CollectionType, CollectionId } from '../shared/Consts'; // CollectionType
 
 import { VaultController } from './Vault';
 import { buildMember } from './Members';
 import { createNetworkMonitor } from './NetworkUtils';
 import { Tasker } from './Tasker';
-import { CollectionController } from './collections/Collection';
+import { CollectionContent, CollectionController } from './collections/Collection';
 
 // import { Feature } from './features/Features';
 // import type { FeatureType } from './features/Features';
@@ -88,12 +88,47 @@ export class Account extends EventTarget {
     return this.#accountVault.listCollections();
   }
 
-  public getCollection(collectionId: string): CollectionController | null {
-    return this.#accountVault.getCollectionById(collectionId);
+  public async getCollection(
+    collectionName: string,
+    collectionType: CollectionType,
+    autoCreate: boolean = false,
+  ): Promise<CollectionContent | null> {
+    const exists = this.collectionExists(collectionName);
+    if (!exists && autoCreate) {
+      return this.createNewCollection(collectionName, collectionType);
+    }
+    if (exists) {
+      return this.#accountVault.getCollectionByName(this.#tasker, collectionName);
+    }
+    return null;
   }
 
-  public createNewCollection(collectionName: string, collectionType: CollectionType): Promise<CollectionController> {
+  public async getCollectionById(collectionId: CollectionId): Promise<CollectionContent | null> {
+    return this.#accountVault.getCollectionById(this.#tasker, collectionId);
+  }
+
+  public async getCollectionByName(collectionName: string): Promise<CollectionContent | null> {
+    return this.#accountVault.getCollectionByName(this.#tasker, collectionName);
+  }
+
+  public collectionExists(collectionName: string): boolean {
+    return this.listCollections().some(c => c.getName() === collectionName);
+  }
+
+  public async createNewCollection(collectionName: string, collectionType: CollectionType): Promise<CollectionContent> {
     return this.#accountVault.createCollection(collectionName, collectionType, this.#tasker);
+  }
+
+  public async removeCollection(collectionName: string): Promise<boolean> {
+    const col = this.listCollections().find(c => c.getName() === collectionName);
+    if (!col) throw new Error('Collection not found');
+    return this.#accountVault.removeCollectionById(col.getId());
+  }
+
+  public async renameCollection(oldName: string, newName: string): Promise<boolean> {
+    const col = this.listCollections().find(c => c.getName() === oldName);
+    if (!col) throw new Error('Collection not found');
+    return this.#accountVault.renameCollectionById(col.getId(), newName);
   }
 
   // public upload(fileId: FileId, data: DataSource, encKey: RawAEADKey, options?: UploadOptions) {
