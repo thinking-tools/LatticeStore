@@ -40,7 +40,7 @@ type WatchParams = {
   memberId: string;
   vaultId: string;
   authToken: string;
-  files: Array<{ s3Key: string; etag: string | Function }>;
+  files: Array<{ fileId: string; etag: string }>;
 };
 
 type ChunkResult = { chunkIndex: number; chunkKey: string; chunkEtag: string };
@@ -78,8 +78,8 @@ const handleWatch = async (params: WatchParams) => {
   const headers = { 'x-member-id': memberId, 'x-vault-id': vaultId };
 
   const checklist = files.map(f => ({
-    id: f.s3Key,
-    etag: typeof f.etag === 'function' ? f.etag() : f.etag,
+    id: f.fileId,
+    etag: f.etag,
   }));
 
   const response = await authRequest(url, 'POST', authToken, { checklist } as CheckRequest, headers);

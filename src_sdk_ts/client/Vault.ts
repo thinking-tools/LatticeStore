@@ -374,7 +374,9 @@ export class VaultController {
     if (!response.ok) {
       throw new Error(response.message || 'Update failed');
     }
-    this.#etag = response.newEtag;
+
+    console.warn('Vault update successful:', response);
+    this.#etag = response.etag;
   };
 
   isManagerMember(): boolean {

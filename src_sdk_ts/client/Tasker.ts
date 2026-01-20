@@ -139,7 +139,7 @@ type WatchQItem = {
   active: boolean;
   memberId: MemberId;
   vaultId: VaultId;
-  files: Array<{ s3Key: string; etag: string | Function }>;
+  files: Array<{ fileId: string; etag: string | Function }>;
   vaultRef: VaultController;
   cb: (result: boolean) => void;
 };
@@ -264,7 +264,10 @@ export class Tasker {
           memberId: item.memberId,
           vaultId: item.vaultId,
           authToken: item.vaultRef.getAuthToken(), // <-- also refresh here
-          files: item.files,
+          files: item.files.map(f => ({
+            fileId: f.fileId,
+            etag: typeof f.etag === 'function' ? f.etag() : f.etag,
+          })),
         });
       }
     }
@@ -852,7 +855,7 @@ export class Tasker {
         active: true,
         memberId: creds.memberId,
         vaultId: creds.vaultId,
-        files: [{ s3Key: creds.vault.id, etag: creds.vault.etag }],
+        files: [{ fileId: creds.vault.id, etag: () => v.getEtag() }],
         vaultRef: v,
         cb: v.timeToFetchUpdate,
       });

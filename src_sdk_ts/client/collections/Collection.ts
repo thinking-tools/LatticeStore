@@ -181,7 +181,6 @@ export class CollectionController<T extends CollectionContent = CollectionConten
     switch (this.getType()) {
       case 'KV' as CollectionType:
         this.#content = KVContent.deserialize(content) as unknown as T;
-
         break;
       default:
         throw new Error(`Unsupported collection type: ${this.#minimal.colType}`);

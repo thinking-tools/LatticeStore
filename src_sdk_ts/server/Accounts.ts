@@ -13,7 +13,7 @@ export type VaultUpdateResponse = {
   ok: boolean;
   statusCode: number;
   message?: string;
-  newEtag?: string;
+  etag?: string;
   // On conflict, return server state for client merge
   serverVault?: any;
   serverEtag?: string;
@@ -210,7 +210,7 @@ export class Accounts {
       return {
         ok: s3PutResult.status === 200,
         statusCode: s3PutResult.status,
-        newEtag,
+        etag: newEtag,
       };
     } catch (error) {
       throw new Error(`Failed to update vault ${vaultId} manifest: ${(error as Error).message}`);

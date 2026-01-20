@@ -100,12 +100,12 @@
             const listCollections = await account.listCollections();
             console.log('User collections:', listCollections);
 
-            // dogCollection.set('jack', true);
-            // console.log('has entry after set: ' + dogCollection.has('jack'));
+            // for (const coll of listCollections) {
+            //   await account.removeCollection(coll.getName());
+            // }
 
-            // dogCollection.set('jack2', 'russel?');
-            // const jackValue = dogCollection.get('jack2');
-            // console.log('jack2 value: ' + jackValue);
+            // const listCollections2 = await account.listCollections();
+            // console.log('User collections:', listCollections2);
           }
         },
         async logout() {
