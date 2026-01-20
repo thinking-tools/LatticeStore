@@ -57,7 +57,7 @@ type SyncState = 'idle' | 'pending' | 'syncing' | 'error';
 
 export class CollectionController<T extends CollectionContent = CollectionContent> {
   readonly #minimal: CollectionMinimal;
-  readonly #s3Key: string;
+  readonly #colId: string;
   readonly #vault: VaultController;
   #meta?: CollectionMeta | null;
   #metaBytesCache: Uint8Array<ArrayBuffer> | null = null;
@@ -81,12 +81,12 @@ export class CollectionController<T extends CollectionContent = CollectionConten
   constructor(collection: CollectionMinimal, vault: VaultController, meta?: CollectionMeta) {
     this.#minimal = collection;
     this.#vault = vault;
-    this.#s3Key = `${collection.colId}`;
+    this.#colId = `${collection.colId}`;
     // if meta do not initialize
     if (meta) {
       this.#meta = meta;
     }
-    console.log('CollectionController created:', this.#vault.getId(), this.#s3Key);
+    console.log('CollectionController created:', this.#vault.getId(), this.#colId);
   }
 
   public getColMinimalRef(): CollectionMinimal {
@@ -104,6 +104,10 @@ export class CollectionController<T extends CollectionContent = CollectionConten
   }
   public getEncKey(): RawAEADKey {
     return this.#minimal.colEncKey;
+  }
+
+  public getEtag(): string {
+    return this.#meta?.etag ?? '';
   }
 
   public setName(newName: string, memberId: MemberId | null): void {
@@ -126,6 +130,7 @@ export class CollectionController<T extends CollectionContent = CollectionConten
     type: CollectionType,
     vault: VaultController,
     memberId: MemberId | null,
+    tasker?: Tasker,
   ): CollectionController {
     const minimal: CollectionMinimal = {
       colId: `${genId()}` as CollectionId,
@@ -186,9 +191,10 @@ export class CollectionController<T extends CollectionContent = CollectionConten
         throw new Error(`Unsupported collection type: ${this.#minimal.colType}`);
     }
     if (autoSync) {
-      // auto upload on changes
-      this.#hookContent();
-      // register for watch remote changes
+      this.enableAutoSync(tasker);
+      // // auto upload on changes
+      // this.#hookContent();
+      // // register for watch remote changes
       // this.#registerWatch();
     }
     return this.#content as T;
@@ -221,6 +227,21 @@ export class CollectionController<T extends CollectionContent = CollectionConten
     }
   }
 
+  enableAutoSync(tasker: Tasker): void {
+    if (this.#tasker) return; // already enabled
+    this.#tasker = tasker;
+    this.#hookContent();
+    this.#registerWatch();
+  }
+
+  #registerWatch() {
+    if (!this.#tasker) return;
+    // Add collection to vault's watch list
+    this.#tasker.watchCollection(this.#vault, this.getId(), this.getEtag(), () => {
+      this.#pullAndMerge();
+    });
+  }
+
   async #save(): Promise<void> {
     if (!this.#tasker || !this.#content?.getPendingChanges()) return;
 
@@ -230,7 +251,7 @@ export class CollectionController<T extends CollectionContent = CollectionConten
 
     const etag = this.#meta?.etag;
     const blob = this.serialize();
-
+    console.warn('uploading changes. ...');
     try {
       // Conditional upload with etag
       const handle = etag
@@ -280,6 +301,21 @@ export class CollectionController<T extends CollectionContent = CollectionConten
     } else {
       this.syncState$.set('idle');
     }
+  }
+
+  async flush(): Promise<void> {
+    if (this.#syncTimeout) {
+      clearTimeout(this.#syncTimeout);
+      this.#syncTimeout = null;
+    }
+    await this.#save();
+  }
+
+  dispose() {
+    this.#unsubscribe?.();
+    this.#currentUpload?.abort();
+    if (this.#syncTimeout) clearTimeout(this.#syncTimeout);
+    this.#tasker?.unwatchCollection(this.#vault.getId(), this.getId());
   }
 
   /** Check if there are unsaved changes */

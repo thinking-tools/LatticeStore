@@ -100,12 +100,11 @@
             const listCollections = await account.listCollections();
             console.log('User collections:', listCollections);
 
-            // for (const coll of listCollections) {
-            //   await account.removeCollection(coll.getName());
-            // }
-
-            // const listCollections2 = await account.listCollections();
-            // console.log('User collections:', listCollections2);
+            const dogCollection = await account.getCollection('doggos', 'KV', true);
+            console.log('Dog collection:', dogCollection);
+            dogCollection.set('firstDog', { name: 'Fido', age: 4 });
+            const dog = dogCollection.get('firstDog');
+            console.log('Retrieved dog from collection:', dog);
           }
         },
         async logout() {

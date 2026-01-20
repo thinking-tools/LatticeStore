@@ -139,9 +139,8 @@ type WatchQItem = {
   active: boolean;
   memberId: MemberId;
   vaultId: VaultId;
-  files: Array<{ fileId: string; etag: string | Function }>;
+  files: Array<{ fileId: string; etag: string | Function; cb: () => void }>;
   vaultRef: VaultController;
-  cb: (result: boolean) => void;
 };
 
 type WorkerState = {
@@ -451,7 +450,15 @@ export class Tasker {
         break;
 
       case 'watch':
-        if (payload.changed?.length) this.#watchQ.get(vaultId)?.cb(true);
+        if (payload.changed?.length) {
+          const i = this.#watchQ.get(vaultId);
+          if (i) {
+            for (const fId of payload.changed) {
+              const f = i.files.find(f => f.fileId === fId);
+              f?.cb();
+            }
+          }
+        }
         break;
 
       case 'download-complete':
@@ -855,14 +862,36 @@ export class Tasker {
         active: true,
         memberId: creds.memberId,
         vaultId: creds.vaultId,
-        files: [{ fileId: creds.vault.id, etag: () => v.getEtag() }],
+        files: [{ fileId: creds.vault.id, etag: () => v.getEtag(), cb: v.timeToFetchUpdate }],
         vaultRef: v,
-        cb: v.timeToFetchUpdate,
       });
       this.#reconcile();
     } catch (e) {
       console.error('Failed to hook vault:', e);
     }
+  }
+
+  watchCollection(v: VaultController, colId: CollectionId, etag: string | (() => string), cb: () => void) {
+    const item = this.#watchQ.get(v.getId());
+    if (!item) {
+      // Auto-hook vault if not already
+      this.hookVault(v);
+    }
+    const watchItem = this.#watchQ.get(v.getId())!;
+
+    // Add to files array for polling
+    watchItem.files.push({
+      fileId: colId,
+      etag: typeof etag === 'function' ? etag : () => etag,
+      cb: cb,
+    });
+    this.#reconcile();
+  }
+
+  unwatchCollection(vaultId: VaultId, colId: CollectionId) {
+    const item = this.#watchQ.get(vaultId);
+    if (!item) return;
+    item.files = item.files.filter(f => f.fileId !== colId);
   }
 
   pause() {
