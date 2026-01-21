@@ -173,6 +173,7 @@ export const RESERVED_USERNAMES = [
 
 export const KV_KEY_SIZE_LIMIT_BYTES = 64;
 
+export const WATCH_POLL_INTERVAL = 3_000; // 3 seconds
 export const CHUNK_SIZE = 8 * 1024 * 1024; // 8 MB
 export const TIMESTAMP_TOLERANCE_MS = 1 * 60 * 1000; // 1 minute
 export const TOKEN_EXPIRATION_SECONDS = 1000 * 60 * 60 * 2; // 2 hours

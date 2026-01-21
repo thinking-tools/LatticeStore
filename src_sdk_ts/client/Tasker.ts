@@ -5,9 +5,9 @@ import { VaultController } from './Vault';
 import { generateRandomUUID } from '../crypto/CryptoUtils.js';
 import { CHUNK_SIZE } from '../shared/Consts.js';
 import { ReactiveValue } from './ReactiveValue';
+import { WATCH_POLL_INTERVAL } from '../shared/Consts.js';
 
 const MAX_WORKERS = Math.min(2, navigator.hardwareConcurrency || 1);
-const POLL_INTERVAL = 5_000;
 const MAX_RETRIES = 3;
 const STALL_TIMEOUT = 30_000;
 
@@ -232,7 +232,7 @@ export class Tasker {
     this.#tickTimer ??= setTimeout(() => {
       this.#tickTimer = null;
       this.#tick();
-    }, POLL_INTERVAL);
+    }, WATCH_POLL_INTERVAL);
   }
 
   #clearTick() {

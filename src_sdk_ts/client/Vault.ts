@@ -15,7 +15,7 @@ import type { AEADCryptoKey, RawAEADKey } from '../crypto/CryptoAEAD';
 import type { LoginPayload, LoginRequest, ReauthPayload, ReauthRequest } from './ApiClient';
 
 import { CryptoPQ } from '../crypto/CryptoPQ';
-import { sha256 } from '../crypto/CryptoUtils';
+import { generateRandomUUID, sha256 } from '../crypto/CryptoUtils';
 import {
   generateCanonicalJSON,
   now,
@@ -235,7 +235,7 @@ export class VaultController {
         memberId: this.#activeMember.memberId,
         vaultId: this.#vaultManifest.payload.id,
         timestamp: now(),
-        reqId: crypto.randomUUID(),
+        reqId: generateRandomUUID(),
       };
       const payloadSha256uint8Array = (await sha256(generateCanonicalJSON(payload), 'uint8array')) as Uint8Array;
       const body: ReauthRequest = {

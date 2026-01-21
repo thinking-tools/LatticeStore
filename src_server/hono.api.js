@@ -11,7 +11,7 @@ const IO_GB = 10 * 1024 * 1024 * 1024; // 10 GB in bytes
 // function emailIsValid(email) {
 //   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 // }
-
+let ls = null;
 const api = new Hono({ strict: false });
 api.use('*', async (c, next) => {
   const { REDIS_URL, REDIS_TOKEN, USER_STORAGE_QUOTA, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_ENDPOINT, S3_REGION } =
@@ -30,20 +30,23 @@ api.use('*', async (c, next) => {
       enableTelemetry: false,
       automaticDeserialization: false,
     });
-  const ls = new LatticeStoreService(
-    {
-      accessKeyId: S3_ACCESS_KEY_ID,
-      secretAccessKey: S3_SECRET_ACCESS_KEY,
-      endpoint: S3_ENDPOINT,
-      region: S3_REGION,
-    },
-    createAdapter,
-  );
-  c.set('lattice', ls);
+  if (ls === null) {
+    ls = new LatticeStoreService(
+      {
+        accessKeyId: S3_ACCESS_KEY_ID,
+        secretAccessKey: S3_SECRET_ACCESS_KEY,
+        endpoint: S3_ENDPOINT,
+        region: S3_REGION,
+      },
+
+      createAdapter,
+    );
+  }
+  // c.set('lattice', ls);
   await next();
 });
 api.get('list', async c => {
-  const ls = c.get('lattice');
+  // const ls = c.get('lattice');
   if (!ls) {
     return c.json({ ok: false, message: 'Service not initialized' }, 500);
   }
@@ -52,7 +55,7 @@ api.get('list', async c => {
 });
 
 api.get('clearall', async c => {
-  const ls = c.get('lattice');
+  // const ls = c.get('lattice');
   if (!ls) {
     return c.json({ ok: false, message: 'Service not initialized' }, 500);
   }
@@ -64,7 +67,7 @@ api.get('clearall', async c => {
 api.post('login', async c => {
   const body = await c.req.json();
   // const headers = c.req.raw.headers;
-  const ls = c.get('lattice');
+  // const ls = c.get('lattice');
   if (!ls) {
     return c.json({ ok: false, message: 'Service not initialized' }, 500);
   }
@@ -78,7 +81,7 @@ api.post('register', async c => {
   const body = await c.req.json();
   // const headers = c.req.raw.headers;
   // console.log('Register headers: ', headers);
-  const ls = c.get('lattice');
+  // const ls = c.get('lattice');
   if (!ls) {
     return c.json({ ok: false, message: 'Service not initialized' }, 500);
   }
@@ -91,7 +94,7 @@ api.post('register', async c => {
 api.post('check-updates', async c => {
   const body = await c.req.json();
   const headers = c.req.raw.headers;
-  const ls = c.get('lattice');
+  // const ls = c.get('lattice');
   if (!ls) {
     return c.json({ ok: false, message: 'Service not initialized' }, 500);
   }
@@ -115,7 +118,7 @@ api.post('check-updates', async c => {
 
 api.get('download', async c => {
   const headers = c.req.raw.headers;
-  const ls = c.get('lattice');
+  // const ls = c.get('lattice');
   if (!ls) {
     return c.json({ ok: false, message: 'Service not initialized' }, 500);
   }
@@ -133,7 +136,7 @@ api.get('download', async c => {
 api.put('upload', async c => {
   const body = await c.req.arrayBuffer();
   const headers = c.req.raw.headers;
-  const ls = c.get('lattice');
+  // const ls = c.get('lattice');
   if (!ls) {
     return c.json({ ok: false, message: 'Service not initialized' }, 500);
   }
@@ -143,7 +146,7 @@ api.put('upload', async c => {
 
 api.post('reauth', async c => {
   const body = await c.req.json();
-  const ls = c.get('lattice');
+  // const ls = c.get('lattice');
   if (!ls) {
     return c.json({ ok: false, message: 'Service not initialized' }, 500);
   }
