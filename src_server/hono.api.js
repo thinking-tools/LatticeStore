@@ -141,6 +141,16 @@ api.put('upload', async c => {
   return c.json({ ok: result.ok, message: result.message, etag: result.etag }, result.statusCode);
 });
 
+api.post('reauth', async c => {
+  const body = await c.req.json();
+  const ls = c.get('lattice');
+  if (!ls) {
+    return c.json({ ok: false, message: 'Service not initialized' }, 500);
+  }
+  const reauthResponse = await ls.reauth(body);
+  return c.json(reauthResponse, reauthResponse.statusCode);
+});
+
 // api.get('download/:fileId', async c => {
 //   const authTokenBearer = c.req.header('Authorization');
 //   const providedAuthToken = authTokenBearer.split(' ')[1];

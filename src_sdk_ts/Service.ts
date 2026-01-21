@@ -1,5 +1,5 @@
 import { S3mini } from 's3mini';
-import { validateRegistrationRequest, validateLoginRequest } from './shared/Validators';
+import { validateRegistrationRequest, validateLoginRequest, isValidReauthRequest } from './shared/Validators';
 import { Accounts } from './server/Accounts';
 import { Admin } from './server/admin/Admin';
 import { Tokens } from './server/Tokens';
@@ -9,7 +9,15 @@ import Keyv from 'keyv';
 
 import type { S3Config } from 's3mini';
 import type { KeyvStoreAdapter } from 'keyv';
-import type { RegisterResponse, LoginRequest, LoginResponse, CheckRequest, CheckResponse } from './client/ApiClient';
+import type {
+  RegisterResponse,
+  LoginRequest,
+  LoginResponse,
+  CheckRequest,
+  CheckResponse,
+  ReauthResponse,
+  ReauthRequest,
+} from './client/ApiClient';
 import type { Vault, VaultUpdate } from './client/Vault';
 import type { DownloadResult, UploadResult } from './server/Chunks';
 import type { MemberId, VaultId } from './shared/Consts.js';
@@ -100,6 +108,41 @@ export class LatticeStoreService {
       return {
         ok: false,
         message: `Login request failed: ${(error as Error).message}`,
+        code: 400,
+      };
+    }
+  }
+
+  public async reauth(body: ReauthRequest): Promise<ReauthResponse> {
+    try {
+      const vaultManifest = await this.#accounts.getAccountVaultById(body.payload.vaultId);
+      if (!vaultManifest) {
+        throw new Error('Vault not found');
+      }
+      const valid = await isValidReauthRequest(body, vaultManifest);
+      if (!valid) {
+        throw new Error('Invalid or expired timestamp');
+      }
+      const memberRole = this.#accounts.getMemberRole(body.payload.memberId, vaultManifest);
+      if (!memberRole) {
+        throw new Error('No permissions for this member');
+      }
+      const token = await this.#tokens.regenerateToken(
+        body.payload.memberId,
+        body.payload.vaultId,
+        memberRole,
+        body.payload.reqId,
+      );
+      return {
+        ok: true,
+        authToken: token,
+        message: 'Reauthentication successful',
+        code: 200,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        message: `Reauthentication request failed: ${(error as Error).message}`,
         code: 400,
       };
     }

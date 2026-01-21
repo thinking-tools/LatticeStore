@@ -1,6 +1,6 @@
 import { generateRandomBytes } from '../crypto/CryptoUtils';
 
-import type { LoginPayload } from '../client/ApiClient';
+import type { LoginPayload, ReauthPayload } from '../client/ApiClient';
 import type { Timestamp, DataInput } from './Consts.js';
 import type { VaultRegistrationPayload } from '../client/Vault';
 
@@ -117,7 +117,7 @@ const _canonicalize = (obj: any): any => {
   return obj;
 };
 
-export const generateCanonicalJSON = (payload: LoginPayload | VaultRegistrationPayload): string => {
+export const generateCanonicalJSON = (payload: LoginPayload | VaultRegistrationPayload | ReauthPayload): string => {
   return JSON.stringify(_canonicalize(payload));
 };
 

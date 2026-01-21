@@ -175,7 +175,7 @@ export const KV_KEY_SIZE_LIMIT_BYTES = 64;
 
 export const CHUNK_SIZE = 8 * 1024 * 1024; // 8 MB
 export const TIMESTAMP_TOLERANCE_MS = 1 * 60 * 1000; // 1 minute
-export const TOKEN_EXPIRATION_SECONDS = 1000 * 60 * 60 * 6; // 6 hours
+export const TOKEN_EXPIRATION_SECONDS = 1000 * 60 * 60 * 2; // 2 hours
 
 export const CHUNK_TTL_SECONDS = 60 * 15; // 15 minutes
 export const ETAG_TTL_SECONDS = 60 * 5; // 5 minutes

@@ -91,6 +91,21 @@ export class Accounts {
     return [null, null];
   }
 
+  public async getAccountVaultById(vaultId: string): Promise<Vault | null> {
+    const cached: Vault | undefined = await this.#vaultRedis.get(_redisManifestKey(vaultId));
+    if (cached !== undefined) {
+      return cached;
+    }
+    // s3 fallback
+    const s3Object = await this.#s3.getObjectResponse(_s3manifestKey(vaultId));
+    if (s3Object) {
+      const s3vault: Vault = await s3Object.json();
+      await this.#vaultRedis.set(_redisManifestKey(vaultId), s3vault);
+      return s3vault;
+    }
+    return null;
+  }
+
   public async createAccount(body: Vault): Promise<boolean> {
     try {
       const vaultId = body.payload.id;

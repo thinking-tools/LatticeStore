@@ -1,10 +1,18 @@
 import { Keyv } from 'keyv';
 import { generateRandomBytes } from '../crypto/CryptoUtils';
 import { uint8ArrayToHex } from '../shared/Helpers';
-import { PERMISSIONS, TOKEN_EXPIRATION_SECONDS, TOKEN_LENGTH_BYTES, TOKEN_NAMESPACE } from '../shared/Consts';
+import {
+  PERMISSIONS,
+  TOKEN_EXPIRATION_SECONDS,
+  TOKEN_LENGTH_BYTES,
+  TOKEN_NAMESPACE,
+  TIMESTAMP_TOLERANCE_MS,
+} from '../shared/Consts';
 
 import type { VaultId, MemberId, MemberRole } from '../shared/Consts.js';
 import type { KeyvStoreAdapter } from 'keyv';
+
+const REAUTH_NAMESPACE = 'REAUTH_NONCE';
 
 const tokenKeyPrefix = (vaultId: VaultId, memberId: MemberId): string => {
   return `${vaultId}/${memberId}`;
@@ -28,6 +36,7 @@ const tokenValueDecodeRole = (token: string): MemberRole => {
 
 export class Tokens {
   readonly #tokenKeyv: Keyv;
+  readonly #reauthNonces: Keyv;
 
   constructor(keyvAdapter: KeyvStoreAdapter) {
     this.#tokenKeyv = new Keyv({
@@ -36,9 +45,27 @@ export class Tokens {
       namespace: TOKEN_NAMESPACE,
       ttl: TOKEN_EXPIRATION_SECONDS,
     });
+    this.#reauthNonces = new Keyv({
+      store: keyvAdapter,
+      useKeyPrefix: false,
+      namespace: REAUTH_NAMESPACE,
+      ttl: TIMESTAMP_TOLERANCE_MS * 2,
+    });
   }
 
   public async generateTokenForMemberAndVault(memberId: MemberId, vaultId: VaultId, role: MemberRole): Promise<string> {
+    const token = tokenValueEncodeWithRole(role);
+    await this.#tokenKeyv.set(tokenKeyPrefix(vaultId, memberId), token);
+    return token;
+  }
+
+  public async regenerateToken(memberId: MemberId, vaultId: VaultId, role: MemberRole, reqId: string): Promise<string> {
+    const nonceKey = `${vaultId}::${memberId}::${reqId}`;
+    const existingNonce = await this.#reauthNonces.get(nonceKey);
+    if (existingNonce) {
+      throw new Error('Reauthentication request replay detected');
+    }
+    await this.#reauthNonces.set(nonceKey, 'used');
     const token = tokenValueEncodeWithRole(role);
     await this.#tokenKeyv.set(tokenKeyPrefix(vaultId, memberId), token);
     return token;

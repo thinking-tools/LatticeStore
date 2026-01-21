@@ -10,7 +10,7 @@ import {
   COLLECTION_TYPES,
 } from './Consts';
 
-import type { LoginRequest } from '../client/ApiClient';
+import type { LoginRequest, ReauthRequest } from '../client/ApiClient';
 import type { MemberSlot } from '../client/Members.js';
 import type { Vault } from '../client/Vault.js';
 import type { CollectionType, VaultType } from './Consts.js';
@@ -160,6 +160,18 @@ export const validateLoginRequest = async (body: LoginRequest, vaultManifest: Va
         return isValidSignature(body.payloadHash, body.signature, memberSlot);
       }
     }
+  }
+  return false;
+};
+
+export const isValidReauthRequest = async (body: ReauthRequest, vaultManifest: Vault): Promise<boolean> => {
+  const { memberId, vaultId, timestamp, reqId } = body.payload;
+  if (!memberId || !vaultId || !timestamp || !reqId) {
+    return false;
+  }
+  const memberSlot = getMemberFromMemberSlots(vaultManifest.payload.memberSlots, memberId);
+  if (memberSlot && _isTimestampValid(body.payload.timestamp)) {
+    return isValidSignature(body.payloadHash, body.signature, memberSlot);
   }
   return false;
 };

@@ -1,7 +1,27 @@
-import type { Base64, MemberId } from '../shared/Consts';
+import type { Base64, MemberId, VaultId } from '../shared/Consts';
 import type { Vault, VaultUpdate } from './Vault';
 
 // ===== TYPES =====
+export type ReauthPayload = {
+  memberId: MemberId;
+  vaultId: VaultId;
+  reqId: string; // UUID
+  timestamp: number;
+};
+
+export type ReauthRequest = {
+  payload: ReauthPayload;
+  payloadHash: Base64<Uint8Array>;
+  signature: Base64<Uint8Array>;
+};
+
+export type ReauthResponse = {
+  ok: boolean;
+  authToken?: string;
+  message: string;
+  code: number;
+};
+
 export type checkListItem = {
   id: string;
   etag: string;
@@ -327,7 +347,7 @@ const _fetchRequest = async (url: string, options: RequestOptions = {}): Promise
 export const makeRequest = async <T = any>(
   url: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
-  body?: LoginRequest | Vault | CheckRequest | VaultUpdate,
+  body?: LoginRequest | Vault | CheckRequest | VaultUpdate | ReauthRequest,
   headers?: Record<string, string>,
 ): Promise<T> => {
   const parser = await _fetchRequest(url, {

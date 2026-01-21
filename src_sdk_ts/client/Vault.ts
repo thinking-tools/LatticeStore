@@ -12,7 +12,7 @@ import type {
 import type { MemberEncryptedDetail, MemberInfoBasics, MemberSlot } from './Members';
 import type { CollectionContent, CollectionMinimal } from './collections/Collection';
 import type { AEADCryptoKey, RawAEADKey } from '../crypto/CryptoAEAD';
-import type { LoginPayload, LoginRequest } from './ApiClient';
+import type { LoginPayload, LoginRequest, ReauthPayload, ReauthRequest } from './ApiClient';
 
 import { CryptoPQ } from '../crypto/CryptoPQ';
 import { sha256 } from '../crypto/CryptoUtils';
@@ -229,10 +229,32 @@ export class VaultController {
     return this.#authToken;
   }
 
-  handleAuthError(): Promise<boolean> {
-    // TODO: implement token refresh logic
-    console.warn('HANDLE AUTH ERROR IN VAULT CONTROLLER');
-    return Promise.resolve(false);
+  async handleAuthError(): Promise<boolean> {
+    try {
+      const payload: ReauthPayload = {
+        memberId: this.#activeMember.memberId,
+        vaultId: this.#vaultManifest.payload.id,
+        timestamp: now(),
+        reqId: crypto.randomUUID(),
+      };
+      const payloadSha256uint8Array = (await sha256(generateCanonicalJSON(payload), 'uint8array')) as Uint8Array;
+      const body: ReauthRequest = {
+        payload,
+        payloadHash: uint8ArrayToBase64(payloadSha256uint8Array) as Base64<Uint8Array>,
+        signature: uint8ArrayToBase64(
+          CryptoPQ.sign(this.#activeMember.dsaKeys.secretKey, payloadSha256uint8Array),
+        ) as Base64<Uint8Array>,
+      };
+      const response = await makeRequest(`${this.#serviceUrl}/reauth`, 'POST', body);
+      if (response.ok && response.authToken) {
+        this.#authToken = response.authToken;
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Reauth failed:', error);
+      return false;
+    }
   }
 
   getEtag() {
