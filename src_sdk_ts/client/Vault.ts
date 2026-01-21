@@ -259,7 +259,7 @@ export class VaultController {
   async getCollectionById(tasker: Tasker, collectionId: string): Promise<CollectionContent | null> {
     const col = this.collections$.value.find(c => c.getId() === collectionId);
     if (col) {
-      return col.load(tasker);
+      return col.load(tasker, true);
     }
     return null;
   }
@@ -267,7 +267,7 @@ export class VaultController {
   async getCollectionByName(tasker: Tasker, name: string): Promise<CollectionContent | null> {
     const col = this.collections$.value.find(c => c.getName() === name);
     if (col) {
-      return col.load(tasker);
+      return col.load(tasker, true);
       // return col;
     }
     return null;

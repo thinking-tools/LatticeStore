@@ -130,7 +130,6 @@ export class CollectionController<T extends CollectionContent = CollectionConten
     type: CollectionType,
     vault: VaultController,
     memberId: MemberId | null,
-    tasker?: Tasker,
   ): CollectionController {
     const minimal: CollectionMinimal = {
       colId: `${genId()}` as CollectionId,
@@ -191,11 +190,7 @@ export class CollectionController<T extends CollectionContent = CollectionConten
         throw new Error(`Unsupported collection type: ${this.#minimal.colType}`);
     }
     if (autoSync) {
-      this.enableAutoSync(tasker);
-      // // auto upload on changes
-      // this.#hookContent();
-      // // register for watch remote changes
-      // this.#registerWatch();
+      this.enableAutoSync();
     }
     return this.#content as T;
   }
@@ -227,9 +222,8 @@ export class CollectionController<T extends CollectionContent = CollectionConten
     }
   }
 
-  enableAutoSync(tasker: Tasker): void {
-    if (this.#tasker) return; // already enabled
-    this.#tasker = tasker;
+  enableAutoSync(): void {
+    if (this.#unsubscribe) return;
     this.#hookContent();
     this.#registerWatch();
   }
@@ -244,14 +238,11 @@ export class CollectionController<T extends CollectionContent = CollectionConten
 
   async #save(): Promise<void> {
     if (!this.#tasker || !this.#content?.getPendingChanges()) return;
-
-    // Abort any in-flight upload
     this.#currentUpload?.abort();
     this.syncState$.set('syncing');
 
     const etag = this.#meta?.etag;
     const blob = this.serialize();
-    console.warn('uploading changes. ...');
     try {
       // Conditional upload with etag
       const handle = etag

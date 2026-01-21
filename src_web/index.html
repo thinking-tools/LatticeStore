@@ -102,7 +102,7 @@
 
             const dogCollection = await account.getCollection('doggos', 'KV', true);
             console.log('Dog collection:', dogCollection);
-            dogCollection.set('firstDog', { name: 'Fido', age: 4 });
+            // dogCollection.set('firstDog', { name: 'Fido', age: 4 });
             const dog = dogCollection.get('firstDog');
             console.log('Retrieved dog from collection:', dog);
           }

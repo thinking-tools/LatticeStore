@@ -34,18 +34,18 @@ export class KVContent<V = unknown> implements CollectionContent<Map<string, V>>
 
   set(key: string, value: V): void {
     this.#validateKey(key);
-    this.data$.update(m => m.set(key, value));
     this.#pending.set(key, { op: 'set', value });
+    this.data$.update(m => m.set(key, value));
   }
 
   delete(key: string): boolean {
     const had = this.data$.value.has(key);
     if (had) {
+      this.#pending.set(key, { op: 'delete' });
       this.data$.update(m => {
         m.delete(key);
         return m;
       });
-      this.#pending.set(key, { op: 'delete' });
     }
     return had;
   }

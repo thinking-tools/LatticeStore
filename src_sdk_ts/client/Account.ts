@@ -94,6 +94,7 @@ export class Account extends EventTarget {
     autoCreate: boolean = false,
   ): Promise<CollectionContent | null> {
     const exists = this.collectionExists(collectionName);
+
     if (!exists && autoCreate) {
       return this.createNewCollection(collectionName, collectionType);
     }
