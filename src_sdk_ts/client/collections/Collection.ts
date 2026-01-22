@@ -319,9 +319,44 @@ export class CollectionController<T extends CollectionContent = CollectionConten
     this.#content?.clearPending();
   }
 
-  // updateEtag(etag: string): void {
-  //   if ('collectionEtag' in this.#collection) {
-  //     this.#collection.collectionEtag = etag;
-  //   }
-  // }
+  updateFromMinimal(incoming: CollectionMinimal): void {
+    if (incoming.colId !== this.#minimal.colId) {
+      throw new Error('Cannot update: collection ID mismatch');
+    }
+
+    // Name can change freely
+    if (incoming.colName !== this.#minimal.colName) {
+      this.#minimal.colName = incoming.colName;
+    }
+
+    // Key rotation - requires content reload if already loaded
+    const keyChanged = !this.#keysEqual(incoming.colEncKey, this.#minimal.colEncKey);
+    if (keyChanged) {
+      (this.#minimal as CollectionMinimal).colEncKey = incoming.colEncKey;
+      // If content is loaded, it's now stale - force reload on next access
+      if (this.#content) {
+        this.#content = null;
+        this.#meta = null;
+        this.#unsubscribe?.();
+        this.#unsubscribe = null;
+      }
+    }
+
+    // Type change would be a schema migration - not supported via simple update
+    if (incoming.colType !== this.#minimal.colType) {
+      console.warn(
+        `Collection type mismatch for ${this.#colId}: expected ${this.#minimal.colType}, got ${incoming.colType}`,
+      );
+    }
+  }
+
+  #keysEqual(a: RawAEADKey, b: RawAEADKey): boolean {
+    if (a.byteLength !== b.byteLength) return false;
+    const viewA = new Uint8Array(a);
+    const viewB = new Uint8Array(b);
+    for (let i = 0; i < viewA.length; i++) {
+      if (viewA[i] !== viewB[i]) return false;
+    }
+    return true;
+  }
 }

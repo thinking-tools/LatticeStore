@@ -6,6 +6,7 @@ export type Brand<T, B> = T & { [__brand]: B };
 export type Base64<T = unknown> = string & { readonly __base64: T };
 export type Base64Encrypted<T = unknown> = string & { readonly __encrypted: T };
 export type Timestamp = Brand<number, 'Timestamp'>;
+export type ISOTimestamp = Brand<string, 'ISOTimestamp'>;
 export type Hex256 = Brand<string, 'Hex256'>;
 type BinaryData = ArrayBuffer | Uint8Array;
 

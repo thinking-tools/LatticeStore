@@ -3,11 +3,11 @@ import type {
   VaultType,
   MemberId,
   Base64,
-  Timestamp,
   Base64Encrypted,
   CollectionType,
   FileId,
   CollectionId,
+  ISOTimestamp,
 } from '../shared/Consts';
 import type { MemberEncryptedDetail, MemberInfoBasics, MemberSlot } from './Members';
 import type { CollectionContent, CollectionMinimal } from './collections/Collection';
@@ -23,8 +23,9 @@ import {
   base64ToUint8Array,
   fromUint8Array,
   toUint8Array,
+  isoNow,
 } from '../shared/Helpers';
-import { makeRequest } from './ApiClient';
+import { authRequest, makeRequest } from './ApiClient';
 import {
   isValidCollectionName,
   isValidCollectionType,
@@ -52,8 +53,8 @@ export type VaultRegistrationPayload = {
   managerOnlyArea: Base64Encrypted<Uint8Array>; // placeholder for future manager-only data
   keyEpoch: number; // increments when vault keys are rotated
   collectionsEncrypted?: Base64Encrypted<CollectionMinimal[]>; // Just pointers to collection channels, not collection state
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: ISOTimestamp;
+  updatedAt: ISOTimestamp;
 };
 
 export type Vault = {
@@ -72,7 +73,7 @@ export type VaultUpdate = {
 };
 
 export class VaultController {
-  readonly #vaultManifest: Vault;
+  #vaultManifest: Vault;
 
   #etag: string;
   #authToken: string | null = null;
@@ -89,6 +90,9 @@ export class VaultController {
 
   readonly collections$ = new ReactiveValue<CollectionController[]>([]);
   readonly members$ = new ReactiveValue<MemberEncryptedDetail[]>([]);
+
+  #reauthAttempts = 0;
+  #lastReauthTime = 0;
 
   // #tasker: Tasker | null = null;
   constructor(
@@ -152,14 +156,11 @@ export class VaultController {
     return vault;
   }
 
-  unlockAndSetupVault = async (): Promise<boolean> => {
+  async #deriveKeys(): Promise<boolean> {
     const vault = this.#vaultManifest;
-    const member = this.#activeMember!;
+    const member = this.#activeMember;
     const memberSlot = getMemberFromMemberSlots(vault.payload.memberSlots, member.memberId);
-    if (!memberSlot) {
-      // throw new Error('Member slot not found in vault manifest');
-      return false;
-    }
+    if (!memberSlot) return false;
 
     const cipherText = base64ToUint8Array(memberSlot.memberKemCiphertext);
     const sharedKeyRaw = CryptoPQ.decapsulate(cipherText, member.kemKeys.secretKey);
@@ -167,8 +168,8 @@ export class VaultController {
     const encryptedVaultKey = base64ToUint8Array(memberSlot.memberVaultKeyWrapped);
     const aeadMasterKeyRaw = await AEAD.decrypt(sharedKey, encryptedVaultKey);
     this.#aeadVaultKey = await AEAD.importAEADKey(aeadMasterKeyRaw as RawAEADKey);
+
     if (IS_MANAGER_ROLE(memberSlot.memberRole)) {
-      // decrypt member list area if manager
       const managersKey = await getManagerKey(aeadMasterKeyRaw as Uint8Array);
       this.#managersArea = {
         key: managersKey,
@@ -180,15 +181,112 @@ export class VaultController {
       this.#isManagerMember = false;
       this.#collectionsKey = this.#aeadVaultKey;
     }
-    if (vault.payload.collectionsEncrypted && vault.payload.collectionsEncrypted.length > 0) {
-      const collectionsDecrypted = await AEAD.decrypt(
-        this.#collectionsKey!,
-        base64ToUint8Array(vault.payload.collectionsEncrypted),
-      );
-      const collections = JSON.parse(fromUint8Array(collectionsDecrypted)) as CollectionMinimal[];
-      this.collections$.set(collections.map(c => new CollectionController(c, this)));
-    }
     return true;
+  }
+
+  async #decryptCollectionsList(): Promise<CollectionMinimal[]> {
+    const encrypted = this.#vaultManifest.payload.collectionsEncrypted;
+    if (!encrypted || encrypted.length === 0) return [];
+
+    const decrypted = await AEAD.decrypt(this.#collectionsKey!, base64ToUint8Array(encrypted));
+    return JSON.parse(fromUint8Array(decrypted)) as CollectionMinimal[];
+  }
+
+  #mergeCollections(incoming: CollectionMinimal[]): void {
+    const current = this.collections$.value;
+    const currentById = new Map(current.map(c => [c.getId(), c]));
+    const incomingIds = new Set(incoming.map(c => c.colId));
+
+    const merged: CollectionController[] = [];
+
+    for (const col of incoming) {
+      const existing = currentById.get(col.colId);
+      if (existing) {
+        existing.updateFromMinimal(col); // you'll need to add this method to CollectionController
+        merged.push(existing);
+      } else if (!this.#pendingCollections.has(col.colId)) {
+        merged.push(new CollectionController(col, this));
+      }
+    }
+
+    // Keep pending collections that aren't on server yet
+    for (const c of current) {
+      if (this.#pendingCollections.has(c.getId()) && !incomingIds.has(c.getId())) {
+        merged.push(c);
+      }
+    }
+
+    this.collections$.set(merged);
+  }
+
+  // Refactor existing method
+  unlockAndSetupVault = async (): Promise<boolean> => {
+    if (!(await this.#deriveKeys())) return false;
+
+    const collections = await this.#decryptCollectionsList();
+    this.collections$.set(collections.map(c => new CollectionController(c, this)));
+    return true;
+  };
+
+  async #fetchLatestManifest(): Promise<{ vault: Vault; etag: string } | null> {
+    const headers = {
+      'x-member-id': this.#activeMember.memberId,
+      'x-vault-id': this.#vaultManifest.payload.id,
+      'x-chunk-key': this.#vaultManifest.payload.id,
+      'If-None-Match': this.#etag,
+    };
+    if (!this.#authToken) throw new Error('Auth token is missing');
+    const response = await authRequest(`${this.#serviceUrl}/download`, 'GET', this.#authToken, headers);
+
+    if (response.status === 304) return null; // not modified
+    if (!response.ok) throw new Error(`Fetch vault failed: ${response.status}`);
+
+    const newVault = await response.json();
+    const newEtag = response.headers.get('etag') || '';
+
+    return { vault: newVault, etag: newEtag };
+  }
+
+  // New update handler
+  timeToFetchUpdate = async (): Promise<void> => {
+    try {
+      const result = await this.#fetchLatestManifest();
+      if (!result) return;
+      const { vault: newVault, etag: newEtag } = result;
+      if (!isValidVaultManifest(newVault, VAULT_TYPE.account as VaultType)) {
+        console.error('Invalid vault manifest received');
+        return;
+      }
+      const oldEpoch = this.#vaultManifest.payload.keyEpoch;
+      const newEpoch = newVault.payload.keyEpoch;
+
+      // Update manifest reference first
+      (this as any).#vaultManifest = newVault; // or make it non-readonly and add a setter
+      this.#etag = newEtag;
+
+      // Key rotation requires full re-derive
+      if (newEpoch !== oldEpoch) {
+        await this.#deriveKeys();
+      }
+
+      const incoming = await this.#decryptCollectionsList();
+      this.#mergeCollections(incoming);
+
+      // Update members if manager
+      if (this.#isManagerMember && this.#managersArea) {
+        this.#managersArea.memberList = await decryptMemberList(
+          newVault.payload.managerOnlyMemberList,
+          this.#managersArea.key,
+        );
+        this.members$.set(this.#managersArea.memberList);
+      }
+    } catch (err) {
+      if ((err as Error).message.includes('401')) {
+        await this.handleAuthError();
+      } else {
+        console.error('Vault update failed:', err);
+      }
+    }
   };
 
   getId(): VaultId {
@@ -230,11 +328,23 @@ export class VaultController {
   }
 
   async handleAuthError(): Promise<boolean> {
+    const nowTime = now();
     try {
+      if (nowTime - this.#lastReauthTime < 5000) {
+        this.#reauthAttempts++;
+        if (this.#reauthAttempts > 3) {
+          console.error('Reauth loop detected - likely concurrent session conflict');
+          // Emit event or throw to notify UI
+          return false;
+        }
+      } else {
+        this.#reauthAttempts = 1;
+      }
+      this.#lastReauthTime = nowTime;
       const payload: ReauthPayload = {
         memberId: this.#activeMember.memberId,
         vaultId: this.#vaultManifest.payload.id,
-        timestamp: now(),
+        timestamp: nowTime,
         reqId: generateRandomUUID(),
       };
       const payloadSha256uint8Array = (await sha256(generateCanonicalJSON(payload), 'uint8array')) as Uint8Array;
@@ -351,31 +461,11 @@ export class VaultController {
     return collection.content;
   }
 
-  // getCollectionOrCreateByName = async (name: string, type: string): Promise<CollectionController> => {
-  //   let collection = this.getCollectionByName(name);
-  //   if (collection) {
-  //     return collection;
-  //   }
-  //   // create new collection
-  //   const newCollection = CollectionController.createNewCollection(
-  //     name,
-  //     type,
-  //     this.#vaultManifest.payload.id,
-  //     this.#collectionKey as unknown as RawAEADKey,
-  //   );
-  //   this.addCollection(newCollection);
-  //   return newCollection;
-  // };
-
-  timeToFetchUpdate = () => {
-    console.warn('TIME TO FETCH VAULT DATA');
-  };
-
   #saveUpdate = async (): Promise<void> => {
     console.warn('SAVE UPDATE VAULT DATA');
     const updatedPayload = {
       ...this.#vaultManifest.payload,
-      updatedAt: now(),
+      updatedAt: isoNow(),
     };
     const payloadSha256uint8Array = (await sha256(generateCanonicalJSON(updatedPayload), 'uint8array')) as Uint8Array;
     const updateVaultBody = {

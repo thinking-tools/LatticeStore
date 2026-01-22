@@ -7,7 +7,7 @@ import { CryptoPQ } from './crypto/CryptoPQ';
 import { buildMember, createNewCredentials, encryptMemberList, getManagerKey } from './client/Members';
 import { ROLE, VAULT_TYPE } from './shared/Consts.js';
 import { Account, loginAccount } from './client/Account';
-import { uint8ArrayToBase64, now, generateCanonicalJSON } from './shared/Helpers';
+import { uint8ArrayToBase64, generateCanonicalJSON, isoNow } from './shared/Helpers';
 import { DEFAULT_SEED_LENGTH_BYTES, RECOVERY_DEVICE_NAME } from './shared/Consts';
 // import { VaultController } from './Vault';
 
@@ -92,7 +92,7 @@ export class LatticeStoreClient {
         [thisDeviceCredentials.memberEncryptedDetail, recoveryDeviceCredentials.memberEncryptedDetail],
         managersKey,
       );
-      const timestamp = now();
+      const timestamp = isoNow();
 
       const registerPayload: VaultRegistrationPayload = {
         version: 1,

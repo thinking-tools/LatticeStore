@@ -1,7 +1,7 @@
 import { generateRandomBytes } from '../crypto/CryptoUtils';
 
 import type { LoginPayload, ReauthPayload } from '../client/ApiClient';
-import type { Timestamp, DataInput } from './Consts.js';
+import type { Timestamp, ISOTimestamp, DataInput } from './Consts.js';
 import type { VaultRegistrationPayload } from '../client/Vault';
 
 export const encoder = new TextEncoder();
@@ -128,3 +128,5 @@ export const genId = (): string => {
 export const now = (): Timestamp => {
   return Date.now() as Timestamp;
 };
+
+export const isoNow = (): ISOTimestamp => new Date().toISOString() as ISOTimestamp;
