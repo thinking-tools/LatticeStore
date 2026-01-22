@@ -86,7 +86,7 @@ const handleWatch = async (params: WatchParams) => {
   const result = (await response.json()) as CheckResponse;
 
   if (!result.ok) {
-    if (result.code === 401) {
+    if (result.statusCode === 401) {
       self.postMessage({ type: 'auth-error', vaultId });
       return;
     }

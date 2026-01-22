@@ -123,7 +123,7 @@ export class Account extends EventTarget {
   public async removeCollection(collectionName: string): Promise<boolean> {
     const col = this.listCollections().find(c => c.getName() === collectionName);
     if (!col) throw new Error('Collection not found');
-    return this.#accountVault.removeCollectionById(col.getId());
+    return this.#accountVault.removeCollectionById(this.#tasker, col.getId());
   }
 
   public async renameCollection(oldName: string, newName: string): Promise<boolean> {

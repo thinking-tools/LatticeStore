@@ -417,10 +417,33 @@ export class VaultController {
     >;
   }
 
-  async removeCollectionById(id: CollectionId): Promise<boolean> {
+  async removeCollectionById(tasker: Tasker, id: CollectionId): Promise<boolean> {
+    if (!this.#authToken) throw new Error('Not authenticated');
+    if (!this.isManagerMember() || this.#collectionsKey === null)
+      throw new Error('Only manager members can remove collections in this vault');
+    const collection = this.collections$.value.find(c => c.getId() === id);
+    if (collection) {
+      collection.dispose();
+    }
+    tasker.abortByFileId(id);
+    const deleteResp = await authRequest(
+      `${this.#serviceUrl}/delete`,
+      'DELETE',
+      this.#authToken,
+      { keys: [id] },
+      {
+        'x-member-id': this.#activeMember.memberId,
+        'x-vault-id': this.#vaultManifest.payload.id,
+      },
+    );
+    if (!deleteResp.ok && deleteResp.status !== 404) {
+      const body = await deleteResp.json().catch(() => ({}));
+      throw new Error(body.message || `Delete failed: ${deleteResp.status}`);
+    }
     this.collections$.set(this.collections$.value.filter(c => c.getId() !== id));
     await this.#encryptAndUpdateCollectionsList();
     await this.#saveUpdate();
+
     return true;
   }
 

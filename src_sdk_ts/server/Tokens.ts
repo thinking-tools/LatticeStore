@@ -3,7 +3,7 @@ import { generateRandomBytes } from '../crypto/CryptoUtils';
 import { uint8ArrayToHex } from '../shared/Helpers';
 import {
   PERMISSIONS,
-  TOKEN_EXPIRATION_SECONDS,
+  TOKEN_EXPIRATION_MS,
   TOKEN_LENGTH_BYTES,
   TOKEN_NAMESPACE,
   TIMESTAMP_TOLERANCE_MS,
@@ -43,7 +43,7 @@ export class Tokens {
       store: keyvAdapter,
       useKeyPrefix: false,
       namespace: TOKEN_NAMESPACE,
-      ttl: TOKEN_EXPIRATION_SECONDS,
+      ttl: TOKEN_EXPIRATION_MS,
     });
     this.#reauthNonces = new Keyv({
       store: keyvAdapter,
@@ -76,23 +76,34 @@ export class Tokens {
     return storedToken === providedToken;
   }
 
-  public async isValidTokenWriteAccess(memberId: MemberId, vaultId: VaultId, providedToken: string): Promise<boolean> {
+  // In Tokens.ts - add method
+  public async validateTokenAndGetRole(
+    memberId: MemberId,
+    vaultId: VaultId,
+    providedToken: string,
+  ): Promise<MemberRole | null> {
     const storedToken = await this.#tokenKeyv.get(tokenKeyPrefix(vaultId, memberId));
-    if (storedToken !== providedToken) {
-      return false;
-    }
-    const role = tokenValueDecodeRole(storedToken);
-    return PERMISSIONS[role].has('write') === true;
+    if (storedToken !== providedToken) return null;
+    return tokenValueDecodeRole(storedToken);
   }
 
-  public async isValidTokenManageAccess(memberId: MemberId, vaultId: VaultId, providedToken: string): Promise<boolean> {
-    const storedToken = await this.#tokenKeyv.get(tokenKeyPrefix(vaultId, memberId));
-    if (storedToken !== providedToken) {
-      return false;
-    }
-    const role = tokenValueDecodeRole(storedToken);
-    return PERMISSIONS[role].has('manage') === true;
-  }
+  // public async isValidTokenWriteAccess(memberId: MemberId, vaultId: VaultId, providedToken: string): Promise<boolean> {
+  //   const storedToken = await this.#tokenKeyv.get(tokenKeyPrefix(vaultId, memberId));
+  //   if (storedToken !== providedToken) {
+  //     return false;
+  //   }
+  //   const role = tokenValueDecodeRole(storedToken);
+  //   return PERMISSIONS[role].has('write') === true;
+  // }
+
+  // public async isValidTokenManageAccess(memberId: MemberId, vaultId: VaultId, providedToken: string): Promise<boolean> {
+  //   const storedToken = await this.#tokenKeyv.get(tokenKeyPrefix(vaultId, memberId));
+  //   if (storedToken !== providedToken) {
+  //     return false;
+  //   }
+  //   const role = tokenValueDecodeRole(storedToken);
+  //   return PERMISSIONS[role].has('manage') === true;
+  // }
 
   public async revokeToken(memberId: MemberId, vaultId: VaultId): Promise<boolean> {
     return await this.#tokenKeyv.delete(tokenKeyPrefix(vaultId, memberId));

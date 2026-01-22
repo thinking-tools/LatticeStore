@@ -2,6 +2,7 @@
 import { S3mini, sanitizeETag } from 's3mini';
 import { Keyv } from 'keyv';
 import { CHUNK_TTL_SECONDS } from '../shared/Consts.js';
+import { DeleteResponse } from '../client/ApiClient.js';
 
 export type UploadResult = {
   ok: boolean;
@@ -76,6 +77,35 @@ export class Chunks {
     await this.#cache.set(cacheKey, etag, CHUNK_TTL_SECONDS * 1000);
     const data = await response.arrayBuffer();
     return { data, etag, key: chunkKey };
+  }
+
+  async delete(vaultId: string, chunkKeys: string[]): Promise<DeleteResponse> {
+    if (!chunkKeys?.length) {
+      return { ok: true, statusCode: 200, deleted: [], message: 'No chunks to delete' };
+    }
+    try {
+      const [s3Results] = await Promise.all([
+        this.#s3.deleteObjects(chunkKeys.map(k => `${vaultId}/${k}`)),
+        this.#cache.deleteMany(chunkKeys.map(k => `${vaultId}::${k}::etag`)),
+      ]);
+
+      const deleted = chunkKeys.filter((_, i) => s3Results[i]);
+      const failed = chunkKeys.filter((_, i) => !s3Results[i]).map(key => ({ key, error: 'S3 deletion failed' }));
+
+      if (!deleted.length && failed.length) {
+        return { ok: false, statusCode: 500, deleted: [], failed, message: 'Deletions failed' };
+      }
+
+      return {
+        ok: true,
+        statusCode: failed.length ? 207 : 200, // 207 Multi-Status for partial success
+        message: 'Deletion completed, results may vary',
+        deleted,
+        ...(failed.length ? { failed } : {}),
+      };
+    } catch (err) {
+      return { ok: false, statusCode: 500, message: (err as Error).message };
+    }
   }
 
   async #getEtag(vaultId: string, chunkKey: string): Promise<string | null> {

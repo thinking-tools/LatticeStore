@@ -1,5 +1,5 @@
 import type { NetMonitorReturnType } from './NetworkUtils';
-import type { VaultId, TaskId, MemberId, FileId, CollectionId } from '../shared/Consts.js';
+import type { VaultId, TaskId, MemberId, FileId, CollectionId, DataSource } from '../shared/Consts.js';
 import type { RawAEADKey } from '../crypto/CryptoAEAD.js';
 import { VaultController } from './Vault';
 import { generateRandomUUID } from '../crypto/CryptoUtils.js';
@@ -15,8 +15,6 @@ type WorkerId = string;
 type TaskerStatus = 'idle' | 'working' | 'paused:user' | 'paused:network';
 type TaskStatus = 'pending' | 'paused' | 'in-progress' | 'completed' | 'failed';
 // type TaskOp = 'upload' | 'download';
-
-export type DataSource = ArrayBuffer | File | Blob;
 
 type TaskQItem = TaskQUploadItem | TaskQDownloadItem;
 
@@ -901,6 +899,17 @@ export class Tasker {
   resume() {
     this.#userPaused = false;
     this.#reconcile();
+  }
+
+  abortByFileId(fileId: FileId | CollectionId): void {
+    for (const [taskId, task] of this.#taskQ) {
+      if (task.fileId === fileId && !task.aborted) {
+        task.aborted = true;
+        task.reject(new Error('Task aborted: resource deleted'));
+        this.#taskQ.delete(taskId);
+      }
+    }
+    this.#updateTasksSummary();
   }
 
   disableVaultWatch(vaultId: VaultId) {

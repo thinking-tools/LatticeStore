@@ -4,7 +4,7 @@ import { Accounts } from './server/Accounts';
 import { Admin } from './server/admin/Admin';
 import { Tokens } from './server/Tokens';
 import { Chunks } from './server/Chunks';
-import { VAULTS_NAMESPACE, CHUNKS_NAMESPACE } from './shared/Consts';
+import { VAULTS_NAMESPACE, CHUNKS_NAMESPACE, PERMISSIONS } from './shared/Consts';
 import Keyv from 'keyv';
 
 import type { S3Config } from 's3mini';
@@ -17,10 +17,12 @@ import type {
   CheckResponse,
   ReauthResponse,
   ReauthRequest,
+  DeleteRequest,
+  DeleteResponse,
 } from './client/ApiClient';
 import type { Vault, VaultUpdate } from './client/Vault';
 import type { DownloadResult, UploadResult } from './server/Chunks';
-import type { MemberId, VaultId } from './shared/Consts.js';
+import type { AuthResult, MemberId, VaultId } from './shared/Consts.js';
 import { fromUint8Array } from './shared/Helpers';
 
 export class LatticeStoreService {
@@ -49,6 +51,7 @@ export class LatticeStoreService {
     this.#chunks = new Chunks(this.#s3, chunkCache);
   }
 
+  // Public API methods without authentication - registration, login, reauth
   public async register(body: Vault): Promise<RegisterResponse> {
     try {
       const [validated, existingId, existingName] = await Promise.all([
@@ -65,13 +68,13 @@ export class LatticeStoreService {
       return {
         ok: await this.#accounts.createAccount(body),
         message: 'Registration successful',
-        code: 200,
+        statusCode: 200,
       };
     } catch (error) {
       return {
         ok: false,
         message: `Registration request failed: ${(error as Error).message}`,
-        code: 400,
+        statusCode: 400,
       };
     }
   }
@@ -102,13 +105,13 @@ export class LatticeStoreService {
         vaultEtag: etag,
         authToken: token,
         message: 'Login successful',
-        code: 200,
+        statusCode: 200,
       };
     } catch (error) {
       return {
         ok: false,
         message: `Login request failed: ${(error as Error).message}`,
-        code: 400,
+        statusCode: 400,
       };
     }
   }
@@ -137,67 +140,70 @@ export class LatticeStoreService {
         ok: true,
         authToken: token,
         message: 'Reauthentication successful',
-        code: 200,
+        statusCode: 200,
       };
     } catch (error) {
       return {
         ok: false,
         message: `Reauthentication request failed: ${(error as Error).message}`,
-        code: 400,
+        statusCode: 400,
       };
     }
   }
 
+  async #authenticate(headers: Headers): Promise<AuthResult> {
+    const authToken = headers.get('Authorization')?.split(' ')[1];
+    const memberId = headers.get('x-member-id') as MemberId;
+    const vaultId = headers.get('x-vault-id') as VaultId;
+    if (!authToken || !memberId || !vaultId) {
+      return { ok: false, statusCode: 400, message: 'Missing required headers' };
+    }
+    const role = await this.#tokens.validateTokenAndGetRole(memberId, vaultId, authToken);
+    if (!role) {
+      return { ok: false, statusCode: 401, message: 'Invalid or expired token' };
+    }
+    return { ok: true, auth: { authToken, memberId, vaultId, role } };
+  }
+
+  // Public API methods authenticated via headers
   public async checkUpdates(headers: Headers, body: CheckRequest): Promise<CheckResponse> {
     try {
-      const authTokenBearer = headers.get('Authorization') || '';
-      const providedAuthToken = authTokenBearer.split(' ')[1];
-      const memberId = headers.get('x-member-id') as MemberId;
-      const vaultId = headers.get('x-vault-id') as VaultId;
-      if (!memberId || !vaultId || !providedAuthToken) {
-        throw new Error('Missing authentication headers');
-      }
-      const isValidToken = await this.#tokens.isValidToken(memberId, vaultId, providedAuthToken);
-      if (!isValidToken) {
-        return {
-          ok: false,
-          message: 'Invalid or expired authentication token',
-          code: 401,
-          changed: [],
-        };
-      }
+      const auth = await this.#authenticate(headers);
+      if (!auth.ok) return { ...auth };
+      const { vaultId } = auth.auth;
       return {
         ok: true,
         changed: await this.#accounts.getChanges(vaultId, body.checklist),
         message: 'Check completed successfully',
-        code: 200,
+        statusCode: 200,
       };
     } catch (error) {
       return {
         ok: false,
         message: `Check request failed: ${(error as Error).message}`,
-        code: 400,
+        statusCode: 400,
         changed: [],
       };
     }
   }
 
   public async upload(headers: Headers, body: ArrayBuffer): Promise<UploadResult> {
-    const authToken = headers.get('Authorization')?.split(' ')[1];
-    const memberId = headers.get('x-member-id') as MemberId;
-    const vaultId = headers.get('x-vault-id') as VaultId;
+    const auth = await this.#authenticate(headers);
+    if (!auth.ok) return { ...auth };
+    const { vaultId, memberId, role } = auth.auth;
+    if (!PERMISSIONS[role].has('write')) {
+      return { ok: false, statusCode: 403, message: 'Insufficient permissions' };
+    }
     const chunkKey = headers.get('x-chunk-key');
     const contentType = headers.get('Content-Type');
-    if (!authToken || !memberId || !vaultId || !chunkKey) {
+    if (!chunkKey || !contentType) {
       return { ok: false, statusCode: 400, message: 'Missing required headers' };
-    }
-
-    let valid = await this.#tokens.isValidToken(memberId, vaultId, authToken);
-    if (!valid) {
-      return { ok: false, statusCode: 401, message: 'Invalid token' };
     }
     if (chunkKey === vaultId && contentType === 'application/json') {
       try {
+        if (!PERMISSIONS[role].has('manage')) {
+          return { ok: false, statusCode: 403, message: 'Manifest updates require manage permission' };
+        }
         const bodyVault = JSON.parse(fromUint8Array(body as unknown as Uint8Array)) as VaultUpdate;
         const resp = await this.#accounts.updateManifest(vaultId, memberId, bodyVault);
         return resp;
@@ -218,23 +224,36 @@ export class LatticeStoreService {
   }
 
   public async download(headers: Headers): Promise<DownloadResult> {
-    const authToken = headers.get('Authorization')?.split(' ')[1];
-    const memberId = headers.get('x-member-id') as MemberId;
-    const vaultId = headers.get('x-vault-id') as VaultId;
+    const auth = await this.#authenticate(headers);
+    if (!auth.ok) return { ...auth };
+    const { vaultId } = auth.auth;
     const chunkKey = headers.get('x-chunk-key');
-    if (!authToken || !memberId || !vaultId) {
-      return { ok: false, statusCode: 400, message: 'Missing required headers' };
-    }
-
-    let valid = await this.#tokens.isValidToken(memberId, vaultId, authToken);
-    if (!valid) {
-      return { ok: false, statusCode: 401, message: 'Invalid token' };
-    }
     const resp = await this.#chunks.download(vaultId, chunkKey!);
     if (!resp) {
       return { ok: false, statusCode: 404, message: 'Chunk not found' };
     }
     return { ok: true, data: resp.data, etag: resp.etag, key: resp.key, statusCode: 200 };
+  }
+
+  public async delete(headers: Headers, body: DeleteRequest): Promise<DeleteResponse> {
+    const auth = await this.#authenticate(headers);
+    if (!auth.ok) return { ...auth };
+    const { vaultId, role } = auth.auth;
+    if (!PERMISSIONS[role].has('manage')) {
+      return { ok: false, statusCode: 403, message: 'Insufficient permissions' };
+    }
+    if (!Array.isArray(body?.fileKeys) || !body.fileKeys.length) {
+      return { ok: false, statusCode: 400, message: 'Missing keys array' };
+    }
+
+    if (body.fileKeys.includes(vaultId)) {
+      if (!PERMISSIONS[role].has('delete_vault')) {
+        return { ok: false, statusCode: 403, message: 'Insufficient permissions' };
+      }
+      // TODO: delete entire vault
+      // await this.#accounts.deleteAccount(vaultId);
+    }
+    return this.#chunks.delete(vaultId, body.fileKeys);
   }
 
   // // ONLY FOR DEVELOPMENT AND TESTING PURPOSES

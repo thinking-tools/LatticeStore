@@ -19,7 +19,7 @@ export type ReauthResponse = {
   ok: boolean;
   authToken?: string;
   message: string;
-  code: number;
+  statusCode: number;
 };
 
 export type checkListItem = {
@@ -33,9 +33,9 @@ export type CheckRequest = {
 
 export type CheckResponse = {
   ok: boolean;
-  changed: Array<string>;
+  changed?: Array<string>;
   message: string;
-  code: number;
+  statusCode: number;
 };
 
 export type LoginRequest = {
@@ -57,13 +57,13 @@ export type LoginResponse = {
   vaultEtag?: string;
   authToken?: string;
   message: string;
-  code: number;
+  statusCode: number;
 };
 
 export type RegisterResponse = {
   ok: boolean;
   message: string;
-  code: number;
+  statusCode: number;
 };
 
 export type UploadObjectRequest = {
@@ -85,6 +85,18 @@ export type ObjectResult = {
   etag?: string;
   status?: string;
   reason?: string;
+};
+
+export type DeleteRequest = {
+  fileKeys: string[];
+};
+
+export type DeleteResponse = {
+  ok: boolean;
+  deleted?: string[];
+  failed?: { key: string; error: string }[];
+  message: string;
+  statusCode: number;
 };
 
 // ===== AUTH CONFIGURATION =====
