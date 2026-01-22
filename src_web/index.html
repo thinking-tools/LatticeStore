@@ -105,6 +105,10 @@
             dogCollection.set('firstDog', { name: 'Fido', age: 5 });
             const dog = dogCollection.get('firstDog');
             console.log('Retrieved dog from collection:', dog);
+
+            // delete collection
+            const resp = await account.removeCollection('doggos');
+            console.log('Delete collection response:', resp);
           }
         },
         async logout() {

@@ -430,7 +430,7 @@ export class VaultController {
       `${this.#serviceUrl}/delete`,
       'DELETE',
       this.#authToken,
-      { keys: [id] },
+      { fileKeys: [id] },
       {
         'x-member-id': this.#activeMember.memberId,
         'x-vault-id': this.#vaultManifest.payload.id,

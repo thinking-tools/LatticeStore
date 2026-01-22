@@ -157,7 +157,7 @@ api.delete('delete', async c => {
   if (!ls) {
     return c.json({ ok: false, message: 'Service not initialized' }, 500);
   }
-  const deleteResponse = await ls.deleteObjects(headers, body);
+  const deleteResponse = await ls.delete(headers, body);
   return c.json(deleteResponse, deleteResponse.statusCode);
 });
 
