@@ -44,7 +44,7 @@
     "alpinejs": "3.15.4",
     "concurrently": "^9.2.1",
     "daisyui": "5.5.14",
-    "hono": "4.11.4",
+    "hono": "4.11.5",
     "rimraf": "6.1.2",
     "tailwindcss": "4.1.18",
     "typescript": "5.9.3",
@@ -65,7 +65,7 @@
   },
   "dependencies": {
     "@noble/hashes": "2.0.1",
-    "@noble/post-quantum": "0.5.2",
+    "@noble/post-quantum": "0.5.4",
     "keyv": "5.6.0",
     "keyv-upstash": "1.0.8",
     "s3mini": "0.9.1"

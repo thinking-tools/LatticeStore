@@ -97,18 +97,25 @@
           const filename = 'hello2.txt';
           console.log('Login response:', account);
           if (account) {
-            const listCollections = await account.listCollections();
+            const listCollections = await account.listCollectionNames();
             console.log('User collections:', listCollections);
 
-            const dogCollection = await account.getCollection('doggos', 'KV', true);
-            console.log('Dog collection:', dogCollection);
-            dogCollection.set('firstDog', { name: 'Fido', age: 5 });
-            const dog = dogCollection.get('firstDog');
-            console.log('Retrieved dog from collection:', dog);
+            // const puppiesCollection = await account.getCollection('puppies', 'KV', true);
+            // console.log('puppies collection:', puppiesCollection.keys());
+            // puppiesCollection.set('firstDog', { name: 'Fido', age: 3 });
+            // const dog = puppiesCollection.get('firstDog');
+            // console.log('Retrieved puppiesCollection :', dog);
+
+            // // // lets rename the collection
+            // const rename = await account.renameCollection('puppies', 'doggos');
+            // console.log('Rename collection response:', rename);
+
+            // const doggosCollection = await account.getCollection('doggos', 'KV', false);
+            // console.log('doggos collection after rename:', doggosCollection.keys());
 
             // delete collection
-            const resp = await account.removeCollection('doggos');
-            console.log('Delete collection response:', resp);
+            // const resp = await account.removeCollection('doggos');
+            // console.log('Delete collection response:', resp);
           }
         },
         async logout() {

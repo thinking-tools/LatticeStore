@@ -231,9 +231,14 @@ export class CollectionController<T extends CollectionContent = CollectionConten
   #registerWatch() {
     if (!this.#tasker) return;
     // Add collection to vault's watch list
-    this.#tasker.watchCollection(this.#vault, this.getId(), this.getEtag(), () => {
-      this.#pullAndMerge();
-    });
+    this.#tasker.watchCollection(
+      this.#vault,
+      this.getId(),
+      () => this.getEtag(),
+      () => {
+        this.#pullAndMerge();
+      },
+    );
   }
 
   async #save(): Promise<void> {

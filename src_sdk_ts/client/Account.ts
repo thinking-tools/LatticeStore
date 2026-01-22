@@ -88,6 +88,14 @@ export class Account extends EventTarget {
     return this.#accountVault.listCollections();
   }
 
+  public listCollectionNames(): string[] {
+    return this.#accountVault.listCollections().map(c => c.getName());
+  }
+
+  public listCollectionIds(): CollectionId[] {
+    return this.#accountVault.listCollections().map(c => c.getId());
+  }
+
   public async getCollection(
     collectionName: string,
     collectionType: CollectionType,
