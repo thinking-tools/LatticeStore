@@ -25,10 +25,10 @@
   "scripts": {
     "build": "npm run clean && tsdown",
     "build:watch": "tsdown --watch",
-    "dev:remote": "cp infra/.env.remote .dev.vars && npm run build && concurrently -n sdk,vite,api -c blue,green,yellow \"tsdown --watch\" \"vite build --watch\" \"wrangler dev\"",
-    "dev:local": "npm run infra:local:up && cp infra/.env.local .dev.vars && npm run build && concurrently -n sdk,vite,api -c blue,green,yellow \"tsdown --watch\" \"vite build --watch\" \"wrangler dev\"",
-    "infra:local:up": "podman machine start && podman compose --env-file infra/.env.local -f infra/local/compose.minio+valkey.yaml up -d",
-    "infra:local:down": "podman compose --env-file infra/.env.local -f infra/local/compose.minio+valkey.yaml down -v && podman machine stop",
+    "dev:remote": "cp .env.remote .dev.vars && npm run build && concurrently -n sdk,vite,api -c blue,green,yellow \"tsdown --watch\" \"vite build --watch\" \"wrangler dev\"",
+    "dev:local": "npm run infra:local:up && cp .env.local .dev.vars && npm run build && concurrently -n sdk,vite,api -c blue,green,yellow \"tsdown --watch\" \"vite build --watch\" \"wrangler dev\"",
+    "infra:local:up": "podman machine start && podman compose --env-file .env.local -f infra/local/compose.minio+valkey.yaml up -d",
+    "infra:local:down": "podman compose --env-file .env.local -f infra/local/compose.minio+valkey.yaml down -v && podman machine stop",
     "typecheck": "tsc --noEmit",
     "clean": "rimraf dist",
     "prepublishOnly": "npm run clean && npm run build && npm run typecheck"
@@ -39,6 +39,7 @@
   "devDependencies": {
     "@alpinejs/focus": "3.15.4",
     "@alpinejs/persist": "3.15.4",
+    "@keyv/valkey": "^1.0.11",
     "@tailwindcss/vite": "4.1.18",
     "@types/node": "25.0.10",
     "alpinejs": "3.15.4",

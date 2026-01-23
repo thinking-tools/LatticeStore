@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { LatticeStoreService } from '../../dist/service.mjs';
 import { KeyvUpstash } from 'keyv-upstash';
+import KeyvValkey from '@keyv/valkey';
 
 const IO_GB = 10 * 1024 * 1024 * 1024; // 10 GB in bytes
 
@@ -14,22 +15,32 @@ const IO_GB = 10 * 1024 * 1024 * 1024; // 10 GB in bytes
 let ls = null;
 const api = new Hono({ strict: false });
 api.use('*', async (c, next) => {
-  const { REDIS_URL, REDIS_TOKEN, USER_STORAGE_QUOTA, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_ENDPOINT, S3_REGION } =
-    c.env;
+  const { REDIS_URL, REDIS_TOKEN, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_ENDPOINT, S3_REGION, BACKEND } = c.env;
 
-  if (!REDIS_URL || !REDIS_TOKEN || !S3_ACCESS_KEY_ID || !S3_SECRET_ACCESS_KEY || !S3_ENDPOINT || !S3_REGION) {
+  if (
+    !REDIS_URL ||
+    !REDIS_TOKEN ||
+    !S3_ACCESS_KEY_ID ||
+    !S3_SECRET_ACCESS_KEY ||
+    !S3_ENDPOINT ||
+    !S3_REGION ||
+    !BACKEND
+  ) {
     return c.json({ ok: false, message: 'Missing environment vars', statusCode: 500 }, 500);
   }
-
-  const bytesLimit = USER_STORAGE_QUOTA ? parseInt(USER_STORAGE_QUOTA) : IO_GB;
-  c.set('bytesLimit', bytesLimit);
-  const createAdapter = () =>
-    new KeyvUpstash({
-      url: REDIS_URL,
-      token: REDIS_TOKEN,
-      enableTelemetry: false,
-      automaticDeserialization: false,
-    });
+  const createAdapter = () => {
+    if (BACKEND === 'remote') {
+      return new KeyvUpstash({
+        url: REDIS_URL,
+        token: REDIS_TOKEN,
+        enableTelemetry: false,
+        automaticDeserialization: false,
+      });
+    } else {
+      // local dev with Valkey
+      return new KeyvValkey(REDIS_URL, { disable_resubscribing: true });
+    }
+  };
   if (ls === null) {
     ls = new LatticeStoreService(
       {
