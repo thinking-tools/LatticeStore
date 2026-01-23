@@ -23,6 +23,7 @@ services:
       - app-network
 
   minio-init:
+    profiles: ['init']
     image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z-cpuv1@sha256:95b5f3f7969a5c5a9f3a700ba72d5c84172819e13385aaf916e237cf111ab868
     depends_on:
       minio:

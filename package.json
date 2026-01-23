@@ -25,7 +25,10 @@
   "scripts": {
     "build": "npm run clean && tsdown",
     "build:watch": "tsdown --watch",
-    "dev": "npm run build && concurrently -n sdk,vite,api -c blue,green,yellow \"tsdown --watch\" \"vite build --watch\" \"wrangler dev\"",
+    "dev:remote": "cp infra/.env.remote .dev.vars && npm run build && concurrently -n sdk,vite,api -c blue,green,yellow \"tsdown --watch\" \"vite build --watch\" \"wrangler dev\"",
+    "dev:local": "npm run infra:local:up && cp infra/.env.local .dev.vars && npm run build && concurrently -n sdk,vite,api -c blue,green,yellow \"tsdown --watch\" \"vite build --watch\" \"wrangler dev\"",
+    "infra:local:up": "podman machine start && podman compose --env-file infra/.env.local -f infra/local/compose.minio+valkey.yaml up -d",
+    "infra:local:down": "podman compose --env-file infra/.env.local -f infra/local/compose.minio+valkey.yaml down -v && podman machine stop",
     "typecheck": "tsc --noEmit",
     "clean": "rimraf dist",
     "prepublishOnly": "npm run clean && npm run build && npm run typecheck"

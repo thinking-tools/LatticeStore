@@ -1,4 +1,4 @@
-🚫 Work in progress / DO NOT USE!
+⚠️ Work in progress / NOT READY FOR PRODUCTION USE
 
 # LatticeStore SDK (WIP)
 
