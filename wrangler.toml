@@ -1,5 +1,5 @@
 name              = "project"
-main              = "index.hono.js"
+main              = "./server/cf-worker/index.hono.js"
 compatibility_date = "2025-05-07"
 compatibility_flags = [ "nodejs_compat_v2" ]
 

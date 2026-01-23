@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   publicDir: path.resolve(__dirname, 'static'),
-  root: path.resolve(__dirname, './src_web'),
+  root: path.resolve(__dirname, './web_ui'),
   plugins: [tailwindcss()],
   build: {
     outDir: path.resolve(__dirname, './docs'), // output dir

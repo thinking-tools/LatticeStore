@@ -5,7 +5,7 @@ import { logger } from 'hono/logger';
 import { secureHeaders } from 'hono/secure-headers';
 import { serveStatic } from 'hono/cloudflare-workers';
 
-import { api } from './src_server/hono.api.js';
+import { api } from './example.api.js';
 
 const SVG = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>
     <rect width='32' height='32' fill='#FF0000'/>
