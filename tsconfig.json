@@ -15,16 +15,8 @@
     "target": "ES2022",
     "lib": ["ES2022", "DOM"],
 
-    // Emit
-    "declaration": true, // Generate .d.ts files
-    "declarationMap": true, // Generate .d.ts.map for type navigation
-    "sourceMap": true, // Generate .js.map for debugging
-    "inlineSources": true,
-    "outDir": "./dist/sdk",
-    "rootDir": "./src_sdk_ts",
-
-    // Preserve structure
-    "moduleDetection": "force",
+    // No emit - tsdown handles build
+    "noEmit": true,
 
     // Interop
     "esModuleInterop": true,
@@ -37,5 +29,5 @@
     "resolveJsonModule": true
   },
   "include": ["src_sdk_ts/**/*"],
-  "exclude": ["node_modules", "dist", "docs", "src_web", "src_server"]
+  "exclude": ["node_modules", "dist"]
 }

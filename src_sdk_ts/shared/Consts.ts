@@ -275,7 +275,7 @@ export const VALIDATION_RULES = {
       'keyEpoch',
       'createdAt',
       'updatedAt',
-    ] as const[],
+    ],
   },
   vaultLoginBody: {
     requiredFields: ['payload', 'payloadHash', 'signerId', 'signature'],
@@ -283,4 +283,4 @@ export const VALIDATION_RULES = {
   vaultLoginPayload: {
     requiredFields: ['accountName', 'memberId', 'timestamp'],
   },
-} as const;
+};

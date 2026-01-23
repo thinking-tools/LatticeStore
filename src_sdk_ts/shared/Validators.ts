@@ -114,14 +114,7 @@ const _validateAccountId = (accountId: string): boolean => {
 const _validateVaultMemberSlots = (memberSlots: MemberSlot[]): boolean => {
   const rules = C.vaultMemberSlots;
   if (!Array.isArray(memberSlots) || memberSlots.length < rules.minCount) return false;
-  return memberSlots.every(
-    env =>
-      env &&
-      typeof env === 'object' &&
-      rules.requiredFields.every(
-        field => (field in env && typeof env[field] === 'string') || typeof env[field] === 'number',
-      ),
-  );
+  return memberSlots.every(env => env && typeof env === 'object' && rules.requiredFields.every(field => field in env));
 };
 
 export const getMemberFromMemberSlots = (memberSlots: MemberSlot[], memberId: string): MemberSlot | null => {

@@ -1,0 +1,69 @@
+services:
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1@sha256:13582eff79c6605a2d315bdd0e70164142ea7e98fc8411e9e10d089502a6d883
+    ports:
+      - '9002:9002'
+      - '9003:9003'
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY}
+      MINIO_ADDRESS: ':9002'
+      MINIO_CONSOLE_ADDRESS: ':9003'
+    command: minio server /data
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9002/minio/health/live']
+      start_period: 10s
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - app-network
+
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z-cpuv1@sha256:95b5f3f7969a5c5a9f3a700ba72d5c84172819e13385aaf916e237cf111ab868
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: 'no'
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9002 ${S3_ACCESS_KEY_ID} ${S3_SECRET_ACCESS_KEY};
+        mc mb --ignore-existing local/ec-dev-bucket-1;
+      "
+    networks:
+      - app-network
+
+  valkey:
+    image: valkey/valkey:9-alpine3.23@sha256:c106a0c03bcb23cbdf9febe693114cb7800646b11ca8b303aee7409de005faa8
+    container_name: valkey
+    ports:
+      - '6379:6379'
+    restart: unless-stopped
+    command: >
+      valkey-server
+        --save ""
+        --appendonly no
+        --requirepass ${REDIS_TOKEN}
+        --protected-mode yes
+        --bind 0.0.0.0
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ['CMD', 'valkey-cli', '-a', '${REDIS_TOKEN}', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 3s
+    networks:
+      - app-network
+
+volumes:
+  minio_data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge

@@ -9,29 +9,26 @@
   ],
   "exports": {
     "./client": {
-      "types": "./dist/sdk/Client.d.ts",
-      "import": "./dist/sdk/Client.js",
-      "default": "./dist/sdk/Client.js"
+      "types": "./dist/client.d.mts",
+      "import": "./dist/client.mjs"
     },
     "./service": {
-      "types": "./dist/sdk/Service.d.ts",
-      "import": "./dist/sdk/Service.js",
-      "default": "./dist/sdk/Service.js"
+      "types": "./dist/service.d.mts",
+      "import": "./dist/service.mjs"
     },
-    "./webworker": {
-      "types": "./dist/sdk/WebGrunt.d.ts",
-      "import": "./dist/sdk/WebGrunt.js",
-      "default": "./dist/sdk/WebGrunt.js"
+    "./WebGrunt": {
+      "types": "./dist/WebGrunt.d.mts",
+      "import": "./dist/WebGrunt.mjs"
     },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "dev": "npm run clean && npm run sdk:build && concurrently \"vite build --watch\" \"npm run sdk:watch\" \"wrangler dev\"",
-    "sdk:build": "tsc --project tsconfig.json",
-    "sdk:watch": "tsc --project tsconfig.json --watch --preserveWatchOutput",
-    "sdk:ts": "tsc --project tsconfig.json --noEmit",
-    "test": "vitest",
-    "clean": "rimraf dist"
+    "build": "npm run clean && tsdown",
+    "build:watch": "tsdown --watch",
+    "dev": "npm run build && concurrently -n sdk,vite,api -c blue,green,yellow \"tsdown --watch\" \"vite build --watch\" \"wrangler dev\"",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist",
+    "prepublishOnly": "npm run clean && npm run build && npm run typecheck"
   },
   "keywords": [],
   "author": "",
@@ -47,9 +44,10 @@
     "hono": "4.11.5",
     "rimraf": "6.1.2",
     "tailwindcss": "4.1.18",
+    "tsdown": "^0.20.1",
     "typescript": "5.9.3",
     "vite": "7.3.1",
-    "vitest": "4.0.17",
+    "vitest": "4.0.18",
     "wrangler": "4.60.0"
   },
   "prettier": {

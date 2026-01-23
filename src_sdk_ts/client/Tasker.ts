@@ -175,7 +175,7 @@ export class Tasker {
   #initWorkers() {
     for (let i = 0; i < MAX_WORKERS; i++) {
       const id = String(++this.#workerIdCounter);
-      const worker = new Worker(new URL('./WebGrunt', import.meta.url), { type: 'module' });
+      const worker = new Worker(new URL('./WebGrunt.mjs', import.meta.url), { type: 'module' });
       worker.onmessage = e => this.#onWorkerMsg(id, e);
       worker.onerror = e => this.#onWorkerError(id, e);
       worker.postMessage({ action: 'init', endpoint: this.#endpoint, workerId: id });
