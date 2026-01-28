@@ -1,11 +1,12 @@
 // import type { DataSource, UploadOptions } from './Tasker';
-import type { MemberRole, MemberStatus, CollectionType, CollectionId } from '../shared/Consts'; // CollectionType
+import type { MemberRole, MemberStatus, CollectionType, CollectionId, Base64, MemberId } from '../shared/Consts'; // CollectionType
 
 import { VaultController } from './Vault';
-import { buildMember } from './Members';
+import { buildMember, MemberSlot } from './Members';
 import { createNetworkMonitor } from './NetworkUtils';
 import { Tasker } from './Tasker';
 import { CollectionContent, CollectionController } from './collections/Collection';
+import { uint8ArrayToBase64 } from '../shared/Helpers';
 
 // import { Feature } from './features/Features';
 // import type { FeatureType } from './features/Features';
@@ -49,6 +50,10 @@ export class Account extends EventTarget {
   }
   public get devices$() {
     return this.#accountVault.members$;
+  }
+
+  public get deviceNames(): string[] {
+    return this.#accountVault.members$.getSnapshot().map(m => m.memberName);
   }
 
   public get tasks$() {
@@ -155,4 +160,40 @@ export class Account extends EventTarget {
   //   return;
   //   // const newVaultManifest = await this.#accountVault.addCollection(collectionName, collectionType);
   // }
+
+  async addMember(
+    kemPubkeyBase64: Base64<Uint8Array>,
+    dsaPubkeyBase64: Base64<Uint8Array>,
+    memberName: string,
+    memberRole: MemberRole,
+    privateNote?: string,
+  ): Promise<MemberSlot> {
+    return this.#accountVault.addMemberByPublicKeys(
+      kemPubkeyBase64,
+      dsaPubkeyBase64,
+      memberName,
+      memberRole,
+      privateNote,
+    );
+  }
+
+  async addMemberWithSeed(
+    memberSeed: Uint8Array,
+    memberName: string,
+    memberRole: MemberRole,
+    privateNote?: string,
+  ): Promise<MemberSlot> {
+    const memberBasics = buildMember(memberSeed);
+    return this.#accountVault.addMemberByPublicKeys(
+      uint8ArrayToBase64(memberBasics.kemKeys.publicKey) as Base64<Uint8Array>,
+      uint8ArrayToBase64(memberBasics.dsaKeys.publicKey) as Base64<Uint8Array>,
+      memberName,
+      memberRole,
+      privateNote,
+    );
+  }
+
+  async removeMember(memberId: MemberId): Promise<boolean> {
+    return this.#accountVault.removeMember(memberId);
+  }
 }

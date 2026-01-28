@@ -40,7 +40,7 @@ export type MemberEncryptedDetail = {
   memberKemPubkey: Base64<Uint8Array>; // for re-keying (managers only)
   memberAddedBy: MemberId;
   memberAddedAt: Timestamp;
-  memberPrivateNote?: string;
+  memberPrivateNote?: string | undefined;
 };
 
 export type MemberSecrets = {
@@ -147,6 +147,8 @@ export const buildMember = (seed: Uint8Array): MemberInfoBasics => {
   const kemKeys = CryptoPQ.generateKemKeys(kemSeed);
   const dsaKeys = CryptoPQ.generateDsaKeys(dsaSeed);
   const memberId = getMemberIdFromPubkey(dsaKeys.publicKey) as MemberId;
+  kemSeed.fill(0);
+  dsaSeed.fill(0);
   return Object.freeze({
     memberId,
     memberSeed: seed,

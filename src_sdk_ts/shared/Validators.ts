@@ -41,7 +41,7 @@ const _isValidVault = (body: Vault): boolean => {
     _validateFields(body.payload, C.vaultManifestPayload.requiredFields) &&
     _validateAccountId(body.payload.id) &&
     (body.payload.type === VAULT_TYPE.account
-      ? _validateAccountName(body.payload.name)
+      ? validateAccountName(body.payload.name)
       : _validateVaultName(body.payload.name)) &&
     _validateVaultMemberSlots(body.payload.memberSlots)
   ) {
@@ -91,7 +91,7 @@ const _isAccountNameReserved = (accountName: string): boolean => {
   return false;
 };
 
-const _validateAccountName = (accountName: string): boolean => {
+export const validateAccountName = (accountName: string): boolean => {
   if (typeof accountName !== 'string') return false;
   if (_isAccountNameReserved(accountName)) return false;
   const rules = C.accountName;
@@ -137,7 +137,7 @@ const _isValidLoginPayload = (body: LoginRequest): boolean => {
       return false;
     }
   }
-  if (!_validateAccountName(body.payload.accountName)) return false;
+  if (!validateAccountName(body.payload.accountName)) return false;
   return true;
 };
 export const validateRegistrationRequest = async (body: Vault): Promise<boolean> => {

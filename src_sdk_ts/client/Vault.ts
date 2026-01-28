@@ -7,7 +7,9 @@ import type {
   CollectionType,
   FileId,
   CollectionId,
+  Timestamp,
   ISOTimestamp,
+  MemberRole,
 } from '../shared/Consts';
 import type { MemberEncryptedDetail, MemberInfoBasics, MemberSlot } from './Members';
 import type { CollectionContent, CollectionMinimal } from './collections/Collection';
@@ -15,7 +17,7 @@ import type { AEADCryptoKey, RawAEADKey } from '../crypto/CryptoAEAD';
 import type { LoginPayload, LoginRequest, ReauthPayload, ReauthRequest } from './ApiClient';
 
 import { CryptoPQ } from '../crypto/CryptoPQ';
-import { generateRandomUUID, sha256 } from '../crypto/CryptoUtils';
+import { deriveKeyForRole, generateRandomUUID, getMemberIdFromPubkey, sha256 } from '../crypto/CryptoUtils';
 import {
   generateCanonicalJSON,
   now,
@@ -31,10 +33,11 @@ import {
   isValidCollectionType,
   isValidVaultManifest,
   isUniqueCollectionName,
+  validateAccountName,
 } from '../shared/Validators';
-import { VAULT_TYPE } from '../shared/Consts';
+import { MEMBER_STATUS, VAULT_TYPE } from '../shared/Consts';
 import { IS_MANAGER_ROLE } from '../shared/Consts';
-import { getManagerKey, decryptMemberList, getCollectionsKey } from './Members';
+import { getManagerKey, decryptMemberList, getCollectionsKey, encryptMemberList } from './Members';
 import { CollectionController } from './collections/Collection';
 import { AEAD } from '../crypto/CryptoAEAD';
 import { getMemberFromMemberSlots } from '../shared/Validators';
@@ -225,6 +228,10 @@ export class VaultController {
 
     const collections = await this.#decryptCollectionsList();
     this.collections$.set(collections.map(c => new CollectionController(c, this)));
+
+    if (this.#isManagerMember && this.#managersArea) {
+      this.members$.set(this.#managersArea.memberList);
+    }
     return true;
   };
 
@@ -518,8 +525,147 @@ export class VaultController {
     return this.#isManagerMember;
   }
 
-  // _updateVault() {
-  //   console.warn('UPDATE VAULT MANIFEST');
+  async #rotateAndRewrapForMembers(
+    newMemberSlots: MemberSlot[],
+    newMemberDetails: MemberEncryptedDetail[],
+  ): Promise<void> {
+    if (!this.isManagerMember() || !this.#managersArea) {
+      throw new Error('Only manager members can rotate vault keys');
+    }
+    // 1. Generate fresh root key
+    const newVaultKeyRaw = AEAD.generateRawAEADKeyData();
 
-  // }
+    // 2. Derive new sub-keys
+    const newManagerKey = await getManagerKey(newVaultKeyRaw);
+    const newCollectionsKey = await getCollectionsKey(newVaultKeyRaw);
+
+    for (const slot of newMemberSlots) {
+      const detail = newMemberDetails.find(d => d.memberId === slot.memberId);
+      if (!detail) throw new Error(`Missing detail for ${slot.memberId}`);
+
+      const kemPubkey = base64ToUint8Array(detail.memberKemPubkey);
+      const { cipherText, sharedSecret } = CryptoPQ.encapsulate(kemPubkey);
+      const aeadSharedKey = await AEAD.importAEADKey(sharedSecret as RawAEADKey);
+      sharedSecret.fill(0);
+
+      const roleKey = deriveKeyForRole(slot.memberRole, newVaultKeyRaw);
+      const wrappedKey = await AEAD.encrypt(aeadSharedKey, roleKey as Uint8Array<ArrayBuffer>);
+      if (roleKey !== newVaultKeyRaw) roleKey.fill(0);
+
+      slot.memberKemCiphertext = uint8ArrayToBase64(cipherText) as Base64<Uint8Array>;
+      slot.memberVaultKeyWrapped = uint8ArrayToBase64(wrappedKey) as Base64<Uint8Array>;
+      slot.updatedAt = now() as Timestamp;
+    }
+    this.#vaultManifest.payload.managerOnlyMemberList = await encryptMemberList(newMemberDetails, newManagerKey);
+    const collectionsPlain = this.collections$.value.map(c => c.getColMinimalRef());
+    const collectionsEncrypted = await AEAD.encrypt(
+      newCollectionsKey,
+      toUint8Array(JSON.stringify(collectionsPlain)) as Uint8Array<ArrayBuffer>,
+    );
+    this.#vaultManifest.payload.collectionsEncrypted = uint8ArrayToBase64(collectionsEncrypted) as Base64Encrypted<
+      CollectionMinimal[]
+    >;
+    this.#aeadVaultKey = await AEAD.importAEADKey(newVaultKeyRaw as RawAEADKey);
+    this.#managersArea = { key: newManagerKey, memberList: newMemberDetails };
+    this.#collectionsKey = newCollectionsKey;
+    this.#vaultManifest.payload.keyEpoch++;
+    this.#vaultManifest.payload.memberSlots = newMemberSlots;
+
+    newVaultKeyRaw.fill(0);
+  }
+
+  // Add to Vault.ts
+
+  async addMemberByPublicKeys(
+    kemPubkeyBase64: Base64<Uint8Array>,
+    dsaPubkeyBase64: Base64<Uint8Array>,
+    memberName: string,
+    memberRole: MemberRole,
+    privateNote?: string,
+  ): Promise<MemberSlot> {
+    // 1. Guards
+    if (!this.#isManagerMember || !this.#managersArea) {
+      throw new Error('Only manager members can add members');
+    }
+
+    // check if not reserved names (worth to check if member names are unique too?)
+    if (!validateAccountName(memberName)) {
+      throw new Error('Invalid member name');
+    }
+
+    // 2. Derive memberId from DSA pubkey (deterministic identity)
+    const dsaPubkey = base64ToUint8Array(dsaPubkeyBase64);
+    const memberId = getMemberIdFromPubkey(dsaPubkey) as MemberId;
+
+    const timestamp = now() as Timestamp;
+
+    // 4. Build new member's slot (ciphertext/wrapped will be set by rotate)
+    const newSlot: MemberSlot = {
+      memberId,
+      memberRole,
+      memberStatus: MEMBER_STATUS.ACTIVE,
+      memberKemCiphertext: '' as Base64<Uint8Array>, // placeholder
+      memberVaultKeyWrapped: '' as Base64<Uint8Array>, // placeholder
+      memberDsaPubkey: dsaPubkeyBase64,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+
+    // 5. Build new member's encrypted detail
+    const newDetail: MemberEncryptedDetail = {
+      memberId,
+      memberName,
+      memberKemPubkey: kemPubkeyBase64,
+      memberAddedBy: this.#activeMember.memberId,
+      memberAddedAt: timestamp,
+      memberPrivateNote: privateNote,
+    };
+
+    // 6. Prepare updated arrays (immutable pattern)
+    const updatedSlots = [...this.#vaultManifest.payload.memberSlots, newSlot];
+    const updatedDetails = [...this.#managersArea.memberList, newDetail];
+
+    // 7. Rotate keys and rewrap for ALL members (including new one)
+    await this.#rotateAndRewrapForMembers(updatedSlots, updatedDetails);
+
+    // 8. Persist to server
+    await this.#saveUpdate();
+
+    // 9. Update reactive state
+    this.members$.set([...this.#managersArea.memberList]);
+
+    // 10. Return the now-populated slot
+    return this.#vaultManifest.payload.memberSlots.find(s => s.memberId === memberId)!;
+  }
+
+  // Add to Vault.ts
+
+  async removeMember(memberId: MemberId): Promise<boolean> {
+    // 1. Guards
+    if (!this.#isManagerMember || !this.#managersArea) {
+      throw new Error('Only manager members can remove members');
+    }
+    if (memberId === this.#activeMember.memberId) {
+      throw new Error('Cannot remove yourself');
+    }
+
+    // 2. Verify member exists
+    const slotIdx = this.#vaultManifest.payload.memberSlots.findIndex(s => s.memberId === memberId);
+    if (slotIdx === -1) throw new Error('Member not found');
+
+    // 3. Filter out from both arrays
+    const updatedSlots = this.#vaultManifest.payload.memberSlots.filter(s => s.memberId !== memberId);
+    const updatedDetails = this.#managersArea.memberList.filter(d => d.memberId !== memberId);
+
+    // 4. Rotate keys and rewrap for remaining members
+    await this.#rotateAndRewrapForMembers(updatedSlots, updatedDetails);
+
+    // 5. Persist
+    await this.#saveUpdate();
+
+    // 6. Update reactive state
+    this.members$.set([...this.#managersArea.memberList]);
+
+    return true;
+  }
 }

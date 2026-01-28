@@ -6,13 +6,12 @@ import {
   TOKEN_EXPIRATION_MS,
   TOKEN_LENGTH_BYTES,
   TOKEN_NAMESPACE,
+  REAUTH_NAMESPACE,
   TIMESTAMP_TOLERANCE_MS,
 } from '../shared/Consts';
 
 import type { VaultId, MemberId, MemberRole } from '../shared/Consts.js';
 import type { KeyvStoreAdapter } from 'keyv';
-
-const REAUTH_NAMESPACE = 'REAUTH_NONCE';
 
 const tokenKeyPrefix = (vaultId: VaultId, memberId: MemberId): string => {
   return `${vaultId}/${memberId}`;

@@ -43,6 +43,7 @@ export const VAULTS_NAMESPACE = 'V';
 export const CHUNKS_NAMESPACE = 'C';
 export const TOKEN_NAMESPACE = 'T';
 export const NAME_MAPPING = 'N';
+export const REAUTH_NAMESPACE = 'R';
 
 export const RECOVERY_DEVICE_NAME = '__RECOVERY__';
 
@@ -101,6 +102,10 @@ export const RESERVED_USERNAMES = [
   'superuser',
   'operator',
   'webmaster',
+  'host',
+  'owner',
+  'founder',
+  'creator',
 
   // Official/Support
   'support',

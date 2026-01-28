@@ -77,11 +77,11 @@
         },
         async register(newUsername, password) {
           // console.log('Creating new user:', newUsername, lattice.registerNewAccount);
-          const registerResp = await lattice.register(
-            newUsername,
-            this.devicename,
-            new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 0]),
-          );
+          // const registerResp = await lattice.register(
+          //   newUsername,
+          //   this.devicename,
+          //   new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 3]),
+          // );
           // TODO
           // console.log('Registration response:', registerResp);
           // if (registerResp.ok) {
@@ -90,15 +90,66 @@
           // } else {
           //   alert(registerResp.message);
           // }
+
+          const assertion = await navigator.credentials.create({
+            publicKey: {
+              rp: { name: 'LatticeStore', id: location.hostname },
+              challenge: new Uint8Array(32).fill(0),
+              user: { id: new Uint8Array(32).fill(0), name: newUsername, displayName: newUsername },
+              pubKeyCredParams: [{ alg: -7, type: 'public-key' }],
+              authenticatorSelection: {
+                authenticatorAttachment: 'platform', // <-- forces fingerprint/face/pin
+                residentKey: 'required',
+                userVerification: 'required',
+              },
+              userVerification: 'required',
+              extensions: { prf: {} },
+            },
+          });
+          const prfRes = assertion.getClientExtensionResults().prf?.results?.first;
+          if (!prfRes) throw new Error('PRF not supported on this device');
+          console.log('WebAuthn assertion PRF output:', prfRes, assertion.rawId);
+
+          // now get
+          const get = await navigator.credentials.get({
+            publicKey: {
+              challenge: new Uint8Array(32).fill(0),
+              allowCredentials: [
+                {
+                  id: assertion.rawId,
+                  type: 'public-key',
+                  transports: ['internal'],
+                },
+              ],
+              userVerification: 'required',
+              extensions: { prf: { first: prfRes } },
+            },
+          });
+
+          const getPrfRes = get.getClientExtensionResults().prf?.results?.first;
+          console.log('WebAuthn get PRF output:', getPrfRes);
         },
         async login(username, password) {
           console.log('Logging in user:', username);
-          const account = await lattice.login(username, new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 0]));
+          const account = await lattice.login(username, new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 3]));
           const filename = 'hello2.txt';
           console.log('Login response:', account);
           if (account) {
             const listCollections = await account.listCollectionNames();
             console.log('User collections:', listCollections);
+            const deviceNames = account.deviceNames;
+
+            console.log('Account devices/members:', deviceNames);
+
+            // const newDeviceSeed = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 3]);
+
+            // await account.addMemberWithSeed(newDeviceSeed, 'New_XYZ', 'ADMIN');
+
+            // console.log('Account devices/members:', deviceNames);
+
+            // const deviceNames2 = account.deviceNames;
+
+            // console.log('Account devices/members:', deviceNames2);
 
             // const puppiesCollection = await account.getCollection('puppies', 'KV', true);
             // console.log('puppies collection:', puppiesCollection.keys());
