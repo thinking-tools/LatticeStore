@@ -8,3 +8,4 @@ package-lock.json
 .dev.vars
 .dev.vars*
 infra/local-docker/garage
+.npmrc
