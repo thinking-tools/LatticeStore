@@ -1,6 +1,6 @@
 import { Keyv } from 'keyv';
 import { generateRandomBytes } from '../crypto/CryptoUtils';
-import { uint8ArrayToHex } from '../shared/Helpers';
+import { uint8ArrayToHex, hexToUint8Array } from '../shared/Helpers';
 import {
   PERMISSIONS,
   TOKEN_EXPIRATION_MS,
@@ -24,7 +24,7 @@ const tokenValueEncodeWithRole = (role: MemberRole): string => {
 };
 
 const tokenValueDecodeRole = (token: string): MemberRole => {
-  const byteArray = Buffer.from(token, 'hex');
+  const byteArray = hexToUint8Array(token);
   const roleIndex = byteArray[0];
   const roles = Object.keys(PERMISSIONS);
   if (!roleIndex || roleIndex < 0 || roleIndex >= roles.length) {

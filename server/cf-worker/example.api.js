@@ -61,7 +61,7 @@ api.get('list', async c => {
   if (!ls) {
     return c.json({ ok: false, message: 'Service not initialized' }, 500);
   }
-  const listAll = await ls.listAll();
+  const listAll = await ls.listAccounts();
   return c.json(listAll);
 });
 

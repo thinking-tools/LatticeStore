@@ -6,7 +6,6 @@
 
 ![image](/docs/basic.svg)
 
-// API description: https://latticestore.docs.apiary.io/
 // TODO fix docs
 
 1. install Node.js and npm
